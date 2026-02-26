@@ -1,62 +1,39 @@
-<!DOCTYPE html>
-<html lang="en">
-
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - Enter RP1</title>
-    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
-    <style>
-        body {
-            background-color: #121212;
-            color: #ffffff;
-        }
-
-        .card {
-            background-color: #2C2C2C;
-            border: none;
-        }
-
-        .btn {
-            background-color: #007BFF;
-        }
-
-        .btn:hover {
-            background-color: #0056b3;
-        }
-    </style>
+    <title>RP1 Demo Login Interface</title>
+    <script src="https://cdn.persona.com/personasession.js"></script>
+    <script src="https://cdn.persona.com/usersession.js"></script>
+    <script src="https://cdn.persona.com/personapuppet.js"></script>
 </head>
-
 <body>
-    <div class="container d-flex justify-content-center align-items-center" style="height:100vh;">
-        <div class="card p-4">
-            <h3 class="text-center">Login to Enter RP1</h3>
-            <form>
-                <div class="form-group">
-                    <label for="username">Username</label>
-                    <input type="text" class="form-control" id="username" placeholder="Enter username" required>
-                </div>
-                <div class="form-group">
-                    <label for="password">Password</label>
-                    <input type="password" class="form-control" id="password" placeholder="Enter password" required>
-                </div>
-                <div class="form-group">
-                    <button type="submit" class="btn btn-primary btn-block">Member Login</button>
-                </div>
-                <div class="form-group text-center">
-                    <button type="button" class="btn btn-secondary" onclick="guestLogin()">Continue as Guest</button>
-                </div>
-            </form>
-        </div>
+    <h1>Welcome to RP1 Demo Login Interface</h1>
+    <div id="login">
+        <form id="login-form">
+            <label for="username">Username:</label>
+            <input type="text" id="username" name="username" required>
+            <br>
+            <label for="password">Password:</label>
+            <input type="password" id="password" name="password" required>
+            <br>
+            <button type="submit">Login</button>
+        </form>
     </div>
-
     <script>
-        function guestLogin() {
-            // Logic to handle guest login can be added here
-            alert("Continuing as Guest...");
-        }
+        const personaSession = new PersonaSession();
+        const userSession = new UserSession();
+        const personaPuppet = new PersonaPuppet();
+
+        document.getElementById('login-form').addEventListener('submit', function(event) {
+            event.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            if (personaSession.isActive()) {
+                userSession.login(username, password);
+            } else {
+                alert('No active Persona session!');
+            }
+        });
     </script>
-
 </body>
-
 </html>
