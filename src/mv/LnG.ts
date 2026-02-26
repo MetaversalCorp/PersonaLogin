@@ -9,6 +9,8 @@
  *   Development MSF: https://cdn2.rp1.dev/config/enter.msf
  */
 
+import * as mvmf from "@metaversalcorp/mvmf/dist/mjs/MVMF.js";
+
 /** Email constant used to initiate a guest login via LnG. */
 export const GUEST_EMAIL = "guest@rp1.com";
 
@@ -66,27 +68,28 @@ export interface ILnGClient {
  *   Development: https://cdn2.rp1.dev/config/enter.msf  (when ?backend=dev)
  *
  * Falls back to an error-throwing stub when @metaversalcorp/mvmf is unavailable.
- * Initialization is performed once at module load time (singleton).
+ * Initialization is performed lazily on the first Login() or Logout() call (singleton).
  */
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let _pLnG: any = null;
+let _msfReady: Promise<void> | null = null;
 
-const _initPromise: Promise<void> = (async () => {
-  try {
-    // Use a variable so TypeScript does not statically resolve the private package.
-    const pkg = "@metaversalcorp/mvmf";
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const mvmf: any = await import(pkg);
-    const msfUrl = getMsfConfigUrl();
-    const msf = new mvmf.MSF(msfUrl);
-    await msf.ready();
-    _pLnG = new mvmf.LnG(msf);
-  } catch (err) {
-    // Package not installed or MSF init failed; Login() will throw a clear error.
-    console.error("MV LnG init failed:", err);
+function ensureLnGReady(): Promise<void> {
+  if (!_msfReady) {
+    _msfReady = (async () => {
+      try {
+        const msfUrl = getMsfConfigUrl();
+        const msf = new mvmf.MSF(msfUrl);
+        await msf.ready();
+        _pLnG = new mvmf.LnG(msf);
+      } catch (err) {
+        console.error("MV LnG init failed:", err);
+      }
+    })();
   }
-})();
+  return _msfReady;
+}
 
 export function createLnGClient(): ILnGClient {
   return {
@@ -96,7 +99,7 @@ export function createLnGClient(): ILnGClient {
       remember?: boolean,
       finalizationHandler?: FinalizationHandler
     ): Promise<LnGUser> {
-      await _initPromise;
+      await ensureLnGReady();
       if (!_pLnG) {
         throw new Error(
           "MV LnG is not available: @metaversalcorp/mvmf must be present at runtime"
@@ -106,7 +109,7 @@ export function createLnGClient(): ILnGClient {
     },
 
     async Logout(): Promise<void> {
-      await _initPromise;
+      await ensureLnGReady();
       if (_pLnG) {
         await _pLnG.Logout();
       }
