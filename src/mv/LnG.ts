@@ -9,7 +9,7 @@
  *   Development MSF: https://cdn2.rp1.dev/config/enter.msf
  */
 
-import * as mvmf from "@metaversalcorp/mvmf/dist/mjs/MVMF.js";
+import * as mvmf from "@metaversalcorp/mvmf";
 
 /** Email constant used to initiate a guest login via LnG. */
 export const GUEST_EMAIL = "guest@rp1.com";
