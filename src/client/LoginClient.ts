@@ -1,9 +1,8 @@
-import { AuthService, AuthResponse } from "./AuthService.js";
+import { createLnGClient, ILnGClient, LnGUser, LnGPersona, GUEST_EMAIL } from "../mv/LnG.js";
 import { UserSession } from "./UserSession.js";
 import { ConnectionState } from "../types/index.js";
-import { Endpoints } from "../config.js";
 
-/** Credentials exported so UserSession can reference the same type. */
+/** Credentials exported so callers can reference the same type. */
 export interface LoginCredentials {
   email: string;
   password: string;
@@ -13,17 +12,27 @@ export interface LoginCredentials {
 /**
  * LoginClient — drives the RP1 login UI in index.html.
  *
- * Wires DOM event listeners to AuthService calls and manages the transition
- * between the login views and the post-login session view.
+ * Uses MV LnG (Log-n-Go) for authentication instead of direct HTTP calls.
+ * LnG manages all communication with RP1 servers and token exchange internally.
+ *
+ * Login flow:
+ *   1. Member/guest credentials → pLnG.Login() → LnGUser (with persona list)
+ *   2. Show persona picker → user picks or auto-pick first persona
+ *   3. userSession.pickPersona(id) → PersonaSession → InWorld
+ *
+ * 2FA flow:
+ *   pLnG.Login() invokes the finalizationHandler when a code is required.
+ *   LoginClient shows the 2FA route and resolves the pending promise once
+ *   the user submits the code.
  */
 export class LoginClient {
+  private pLnG: ILnGClient;
   private userSession: UserSession | null = null;
-  private authResponse: AuthResponse | null = null;
+  private pendingUser: LnGUser | null = null;
 
   constructor(_container: HTMLElement) {
+    this.pLnG = createLnGClient();
     this.bindUI();
-    // Attempt to restore a previously stored session on load
-    void this.restoreSession();
   }
 
   // ─── UI helpers ────────────────────────────────────────────────────────────
@@ -37,6 +46,8 @@ export class LoginClient {
       "not-logged-in-route",
       "guest-sign-in-route",
       "login-route",
+      "persona-picker-route",
+      "tfa-route",
     ];
     for (const r of routes) {
       const el = this.el(r);
@@ -74,110 +85,90 @@ export class LoginClient {
     content.scrollTop = content.scrollHeight;
   }
 
-  private showTokenData(response: AuthResponse): void {
-    const content = this.el("status-content");
-    if (!content) return;
-    content.innerHTML = "";
-
-    const addItem = (label: string, value: string, cssClass: string): void => {
-      const item = document.createElement("div");
-      item.className = cssClass;
-      item.innerHTML = `<div class="label">${label}</div><div class="value">${value}</div>`;
-      content.appendChild(item);
-    };
-
-    addItem("Session ID", response.sessionId, "token-item");
-    addItem("User ID", response.token.userId, "token-item");
-    addItem(
-      "Access Token",
-      response.token.accessToken.slice(0, 32) + "…",
-      "token-item"
-    );
-    addItem(
-      "Expires",
-      new Date(response.token.expiresAt).toLocaleString(),
-      "token-item"
-    );
-    if (response.token.personaIds.length) {
-      addItem("Persona IDs", response.token.personaIds.join(", "), "token-item");
-    }
-    addItem(
-      "Server Response",
-      JSON.stringify(
-        {
-          sessionId: response.sessionId,
-          userId: response.token.userId,
-          personaIds: response.token.personaIds,
-          expiresAt: response.token.expiresAt,
-        },
-        null,
-        2
-      ),
-      "transaction-item"
-    );
-  }
-
   private updateSessionInfo(): void {
     const info = this.el("session-info");
-    if (!info || !this.authResponse) return;
+    if (!info || !this.userSession) return;
 
     const session = this.userSession;
     info.innerHTML = `<pre>${JSON.stringify(
       {
-        sessionId: this.authResponse.sessionId,
-        userId: this.authResponse.token.userId,
-        displayName: this.authResponse.displayName,
-        personaIds: this.authResponse.token.personaIds,
-        connectionState: session?.state ?? ConnectionState.Disconnected,
-        tokenExpiresAt: new Date(this.authResponse.token.expiresAt).toISOString(),
+        userId: session.userId,
+        displayName: session.username,
+        personas: session.ownPersonaList.map((p) => ({ id: p.id, name: p.displayName })),
+        connectionState: session.state,
       },
       null,
       2
     )}</pre>`;
   }
 
-  // ─── Session management ────────────────────────────────────────────────────
+  // ─── Persona picker ────────────────────────────────────────────────────────
 
-  private async restoreSession(): Promise<void> {
-    const stored = AuthService.getStoredToken();
-    if (!stored) return;
+  /**
+   * Populate the persona picker list and show the route.
+   * Auto-picks the first persona when only one exists.
+   */
+  private showPersonaPicker(user: LnGUser): void {
+    this.pendingUser = user;
 
-    if (!AuthService.isTokenValid(stored)) {
-      // Attempt silent refresh
-      try {
-        const refreshed = await AuthService.refreshToken(stored.refreshToken);
-        this.appendStatus("Session restored via token refresh.");
-        this.onTokenObtained({
-          token: refreshed,
-          sessionId: "restored",
-          displayName: "Returning User",
-        });
-      } catch {
-        AuthService.clearToken();
-      }
+    if (user.personas.length === 1) {
+      // Auto-pick the only persona
+      this.appendStatus(`Auto-picking persona "${user.personas[0].displayName}".`);
+      void this.onPersonaPicked(user.personas[0].id);
       return;
     }
 
-    this.appendStatus("Session restored from stored token.");
-    this.onTokenObtained({
-      token: stored,
-      sessionId: "restored",
-      displayName: "Returning User",
-    });
+    const list = this.el("persona-list");
+    if (list) {
+      list.innerHTML = "";
+      for (const p of user.personas) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "btn btn-outline-primary w-100 mb-2";
+        btn.textContent = p.displayName || `${p.firstName} ${p.lastName}`.trim();
+        btn.dataset["personaId"] = p.id;
+        btn.addEventListener("click", () => void this.onPersonaPicked(p.id));
+        list.appendChild(btn);
+      }
+    }
+
+    if (user.personas.length === 0) {
+      this.appendStatus("No personas found. Create a new persona to continue.");
+    }
+
+    this.showRoute("persona-picker-route");
   }
 
-  private onTokenObtained(response: AuthResponse): void {
-    this.authResponse = response;
-    this.userSession = new UserSession(response.displayName);
+  private async onPersonaPicked(personaId: string): Promise<void> {
+    if (!this.pendingUser) return;
+    const user = this.pendingUser;
+    this.pendingUser = null;
+
+    this.userSession = new UserSession(user);
+    await this.userSession.connect();
+
+    this.appendStatus(`Entering world with persona ${personaId}…`);
+    try {
+      await this.userSession.pickPersona(personaId);
+      this.onSessionStarted();
+    } catch (err) {
+      this.updateStatusBadge("error");
+      this.appendStatus(`Persona error: ${(err as Error).message}`);
+    }
+  }
+
+  private onSessionStarted(): void {
+    if (!this.userSession) return;
 
     const displayNameEl = this.el("user-display-name");
-    if (displayNameEl) displayNameEl.textContent = response.displayName;
+    if (displayNameEl) displayNameEl.textContent = this.userSession.username;
 
     this.showSection("session");
     this.updateStatusBadge("logged-in");
-    this.showTokenData(response);
     this.updateSessionInfo();
-    this.appendStatus(`Logged in as "${response.displayName}" (${response.token.userId})`);
+    this.appendStatus(
+      `Session started as "${this.userSession.username}" (${this.userSession.userId})`
+    );
   }
 
   // ─── Event binding ─────────────────────────────────────────────────────────
@@ -200,13 +191,7 @@ export class LoginClient {
     // Guest login form
     this.el("guest-form")?.addEventListener("submit", (e) => {
       e.preventDefault();
-      const firstName =
-        (this.el<HTMLInputElement>("guest-first-name")?.value ?? "").trim();
-      const lastName =
-        (this.el<HTMLInputElement>("guest-last-name")?.value ?? "").trim() ||
-        undefined;
-      if (!firstName) return;
-      void this.handleGuestLogin(firstName, lastName);
+      void this.handleGuestLogin();
     });
 
     // Member login form
@@ -226,6 +211,19 @@ export class LoginClient {
       const pw = this.el<HTMLInputElement>("login-password");
       if (!pw) return;
       pw.type = pw.type === "password" ? "text" : "password";
+    });
+
+    // Persona picker — create new persona button
+    this.el("create-persona-button")?.addEventListener("click", () => {
+      void this.handleCreatePersona();
+    });
+
+    // 2FA form
+    this.el("tfa-form")?.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const code = (this.el<HTMLInputElement>("tfa-code")?.value ?? "").trim();
+      if (!code) return;
+      this.submitTfaCode(code);
     });
 
     // Logout
@@ -259,20 +257,30 @@ export class LoginClient {
 
   // ─── Auth handlers ─────────────────────────────────────────────────────────
 
+  /**
+   * Member login — calls pLnG.Login(email, password, remember, finalizationHandler).
+   * MV LnG handles all HTTP communication with RP1 servers internally.
+   */
   private async handleMemberLogin(credentials: LoginCredentials): Promise<void> {
     const btn = this.el<HTMLButtonElement>("login-button");
     if (btn) btn.disabled = true;
 
     this.updateStatusBadge("pending");
-    this.appendStatus(`Connecting to ${Endpoints.login}…`);
+    this.appendStatus("Connecting to RP1 via MV LnG…");
 
     try {
-      const response = await AuthService.loginMember({
-        email: credentials.email,
-        password: credentials.password,
-        remember: credentials.remember,
-      });
-      this.onTokenObtained(response);
+      const user = await this.pLnG.Login(
+        credentials.email,
+        credentials.password,
+        credentials.remember,
+        (resolve2FA) => {
+          this.appendStatus("2FA required — enter confirmation code.");
+          this.showTfaRoute(resolve2FA);
+        }
+      );
+      this.appendStatus(`Authenticated as "${user.displayName}".`);
+      this.updateStatusBadge("success");
+      this.showPersonaPicker(user);
     } catch (err) {
       this.updateStatusBadge("error");
       this.appendStatus(`Login error: ${(err as Error).message}`);
@@ -281,19 +289,22 @@ export class LoginClient {
     }
   }
 
-  private async handleGuestLogin(
-    firstName: string,
-    lastName?: string
-  ): Promise<void> {
+  /**
+   * Guest login — calls pLnG.Login(GUEST_EMAIL).
+   * MV LnG uses the GUEST_EMAIL constant to initiate an anonymous session.
+   */
+  private async handleGuestLogin(): Promise<void> {
     const btn = this.el<HTMLButtonElement>("guest-join-button");
     if (btn) btn.disabled = true;
 
     this.updateStatusBadge("pending");
-    this.appendStatus("Connecting to RP1 as guest…");
+    this.appendStatus("Connecting to RP1 as guest via MV LnG…");
 
     try {
-      const response = await AuthService.loginGuest({ firstName, lastName });
-      this.onTokenObtained(response);
+      const user = await this.pLnG.Login(GUEST_EMAIL);
+      this.appendStatus(`Guest session started as "${user.displayName}".`);
+      this.updateStatusBadge("success");
+      this.showPersonaPicker(user);
     } catch (err) {
       this.updateStatusBadge("error");
       this.appendStatus(`Guest login error: ${(err as Error).message}`);
@@ -302,18 +313,59 @@ export class LoginClient {
     }
   }
 
+  private async handleCreatePersona(): Promise<void> {
+    if (!this.pendingUser) return;
+    const firstName =
+      (this.el<HTMLInputElement>("new-persona-first-name")?.value ?? "").trim();
+    const lastName =
+      (this.el<HTMLInputElement>("new-persona-last-name")?.value ?? "").trim();
+    if (!firstName) return;
+
+    const user = this.pendingUser;
+    this.userSession = new UserSession(user);
+    await this.userSession.connect();
+
+    this.appendStatus(`Creating persona "${[firstName, lastName].filter(Boolean).join(" ")}".`);
+    try {
+      await this.userSession.createPersona(firstName, lastName);
+      this.onSessionStarted();
+    } catch (err) {
+      this.updateStatusBadge("error");
+      this.appendStatus(`Create persona error: ${(err as Error).message}`);
+    }
+  }
+
   private async handleLogout(): Promise<void> {
-    AuthService.clearToken();
+    await this.pLnG.Logout();
     if (this.userSession) {
       await this.userSession.disconnect();
       this.userSession = null;
     }
-    this.authResponse = null;
+    this.pendingUser = null;
 
     this.showSection("login");
     this.showRoute("not-logged-in-route");
     this.updateStatusBadge("pending");
     this.appendStatus("Logged out.");
+  }
+
+  // ─── 2FA ───────────────────────────────────────────────────────────────────
+
+  private pendingTfaResolve: ((code: string) => void) | null = null;
+
+  private showTfaRoute(resolve2FA: (code: string) => void): void {
+    this.pendingTfaResolve = resolve2FA;
+    const codeInput = this.el<HTMLInputElement>("tfa-code");
+    if (codeInput) codeInput.value = "";
+    this.showRoute("tfa-route");
+  }
+
+  private submitTfaCode(code: string): void {
+    if (!this.pendingTfaResolve) return;
+    const resolve = this.pendingTfaResolve;
+    this.pendingTfaResolve = null;
+    this.appendStatus("Submitting 2FA code…");
+    resolve(code);
   }
 
   // ─── Teleport ──────────────────────────────────────────────────────────────

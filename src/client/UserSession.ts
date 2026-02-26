@@ -1,53 +1,70 @@
 import { Session } from "../base/Session.js";
 import { ConnectionState } from "../types/index.js";
-import type { LoginCredentials } from "./LoginClient.js";
-import { AuthService } from "./AuthService.js";
+import type { LnGUser, LnGPersona } from "../mv/LnG.js";
 import { PersonaSession } from "./PersonaSession.js";
 import type { PersonaTransform } from "../avatar/PersonaPuppet.js";
 
 /**
- * UserSession - owns user identity data and coordinates persona sessions.
- * Extends Session with user-level authentication logic.
+ * UserSession - owns the MVRP__RUser model returned by MV LnG and coordinates
+ * persona selection and session management.
+ *
+ * After construction, call pickPersona(id) or createPersona(firstName, lastName)
+ * to enter the world with a specific persona.
  */
 export class UserSession extends Session {
   readonly username: string;
+  readonly userId: string;
+
+  /** All personas associated with this account (ownPersonaList tracker). */
+  readonly ownPersonaList: LnGPersona[];
+
   private personaSession: PersonaSession | null = null;
-  private _userId: string | null = null;
-  private _authToken: string | null = null;
 
-  constructor(username: string) {
+  constructor(user: LnGUser) {
     super();
-    this.username = username;
-  }
-
-  get userId(): string | null {
-    return this._userId;
-  }
-
-  get authToken(): string | null {
-    return this._authToken;
+    this.username = user.displayName;
+    this.userId = user.id;
+    this.ownPersonaList = [...user.personas];
   }
 
   async connect(): Promise<void> {
     this.setState(ConnectionState.Connecting);
+    // Real implementation (requires @metaversalcorp/mvmf at runtime):
+    // await pLnG instance readiness check here.
+    this.setState(ConnectionState.Connected);
   }
 
-  async login(credentials: LoginCredentials): Promise<void> {
-    this.setState(ConnectionState.LoggingIn);
-    const response = await AuthService.loginMember(credentials);
-    this._userId = response.token.userId;
-    this._authToken = response.token.accessToken;
-    this.setState(ConnectionState.LoggedIn);
-  }
-
-  async enterWorld(personaId: string): Promise<void> {
-    if (!this._authToken) {
-      throw new Error("Cannot enter world: not authenticated");
-    }
+  /**
+   * Select an existing persona by ID and enter the world.
+   * Creates a PersonaSession and transitions state to InWorld.
+   */
+  async pickPersona(id: string): Promise<void> {
     this.setState(ConnectionState.EnteringWorld);
-    this.personaSession = new PersonaSession(personaId, this._authToken);
+    this.personaSession = new PersonaSession(id);
     await this.personaSession.connect();
     this.setState(ConnectionState.InWorld);
+  }
+
+  /**
+   * Create a new persona and enter the world with it.
+   *
+   * Real implementation (requires @metaversalcorp/mvmf at runtime):
+   *   const persona = await pLnG.CreatePersona(firstName, lastName);
+   *   this.ownPersonaList.push(persona);
+   *   await this.pickPersona(persona.id);
+   */
+  async createPersona(firstName: string, lastName: string): Promise<LnGPersona> {
+    const displayName = [firstName, lastName].filter(Boolean).join(" ");
+    // Stub: real persona creation uses @metaversalcorp/mvmf CreatePersona()
+    const persona: LnGPersona = {
+      id: `persona_stub_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+      firstName,
+      lastName,
+      displayName,
+    };
+    this.ownPersonaList.push(persona);
+    await this.pickPersona(persona.id);
+    return persona;
   }
 
   /**
@@ -68,9 +85,6 @@ export class UserSession extends Session {
       await this.personaSession.disconnect();
       this.personaSession = null;
     }
-    AuthService.clearToken();
-    this._authToken = null;
-    this._userId = null;
     this.setState(ConnectionState.Disconnected);
   }
 }
