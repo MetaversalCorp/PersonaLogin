@@ -18,8 +18,10 @@ export class PersonaPuppet extends Avatar {
   private flagQueue: FlagQueue;
   private transform: PersonaTransform = { x: 0, y: 0, z: 0, rotY: 0 };
 
-  // Placeholder for rPersona instance from @metaversalcorp/mvrp
-  // In production: private rPersona: import('@metaversalcorp/mvrp').RPersona;
+  // rPersona instance from @metaversalcorp/mvrp.
+  // Type is kept as `unknown` because the private package cannot be resolved
+  // in open-source builds; cast to the real type when the package is available.
+  // import('@metaversalcorp/mvrp').RPersona
   private rPersona: unknown = null;
 
   constructor(personaInfo: PersonaInfo) {
@@ -30,9 +32,10 @@ export class PersonaPuppet extends Avatar {
   async spawn(): Promise<void> {
     if (this._spawned) return;
 
-    // Placeholder: initialize rPersona and attach to world scene
+    // Real call (requires @metaversalcorp/mvrp at runtime):
+    // const { RPersona } = await import('@metaversalcorp/mvrp');
     // this.rPersona = new RPersona({ personaId: this.personaId });
-    // await this.rPersona.spawn(this.transform);
+    // await (this.rPersona as RPersona).spawn(this.transform);
     this.rPersona = { personaId: this.personaId };
 
     this._spawned = true;
@@ -44,7 +47,8 @@ export class PersonaPuppet extends Avatar {
 
     this.flagQueue.clear();
 
-    // Placeholder: this.rPersona.Send({ type: "despawn" });
+    // Real call (requires @metaversalcorp/mvrp at runtime):
+    // (this.rPersona as RPersona).Send({ type: 'despawn' });
     this.rPersona = null;
     this._spawned = false;
 
@@ -59,7 +63,8 @@ export class PersonaPuppet extends Avatar {
     if (!this._spawned) return;
     this.transform = { ...transform };
 
-    // Placeholder: this.rPersona.Send({ type: "move", ...this.transform });
+    // Real call (requires @metaversalcorp/mvrp at runtime):
+    // (this.rPersona as RPersona).Send({ type: 'move', ...this.transform });
     console.log(`[PersonaPuppet] moveTo`, this.transform);
   }
 
@@ -72,7 +77,8 @@ export class PersonaPuppet extends Avatar {
 
     this.flagQueue.enqueue(animationName);
 
-    // Placeholder: this.rPersona.Send({ type: "animate", animation: animationName });
+    // Real call (requires @metaversalcorp/mvrp at runtime):
+    // (this.rPersona as RPersona).Send({ type: 'animate', animation: animationName });
     console.log(`[PersonaPuppet] playAnimation "${animationName}"`);
   }
 
@@ -84,7 +90,8 @@ export class PersonaPuppet extends Avatar {
 
     this.flagQueue.dequeue(animationName);
 
-    // Placeholder: this.rPersona.Send({ type: "stopAnimation", animation: animationName });
+    // Real call (requires @metaversalcorp/mvrp at runtime):
+    // (this.rPersona as RPersona).Send({ type: 'stopAnimation', animation: animationName });
     console.log(`[PersonaPuppet] stopAnimation "${animationName}"`);
   }
 

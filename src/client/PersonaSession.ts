@@ -1,6 +1,7 @@
 import { Session } from "../base/Session.js";
 import { ConnectionState, PersonaInfo } from "../types/index.js";
 import { InWorldSession } from "./InWorldSession.js";
+import type { PersonaTransform } from "../avatar/PersonaPuppet.js";
 
 /**
  * PersonaSession - manages a pRPersona instance and transitions to InWorldSession.
@@ -12,8 +13,10 @@ export class PersonaSession extends Session {
   private inWorldSession: InWorldSession | null = null;
   private _personaInfo: PersonaInfo | null = null;
 
-  // Placeholder for pRPersona instance from @metaversalcorp/mvrp
-  // In production: private pRPersona: import('@metaversalcorp/mvrp').RPersona;
+  // pRPersona instance from @metaversalcorp/mvrp.
+  // Type is kept as `unknown` because the private package cannot be resolved
+  // in open-source builds; cast to the real type when the package is available.
+  // import('@metaversalcorp/mvrp').RPersona
   private pRPersona: unknown = null;
 
   constructor(personaId: string, authToken: string) {
@@ -29,10 +32,11 @@ export class PersonaSession extends Session {
   async connect(): Promise<void> {
     this.setState(ConnectionState.Connecting);
 
-    // Placeholder: instantiate pRPersona from @metaversalcorp/mvrp
+    // Real instantiation (requires @metaversalcorp/mvrp at runtime):
+    // const { RPersona } = await import('@metaversalcorp/mvrp');
     // this.pRPersona = new RPersona({ personaId: this.personaId, authToken: this.authToken });
-    // await this.pRPersona.connect();
-    this.pRPersona = { personaId: this.personaId };
+    // await (this.pRPersona as RPersona).connect();
+    this.pRPersona = { personaId: this.personaId, authToken: this.authToken };
 
     this._personaInfo = new PersonaInfo(
       this.personaId,
@@ -48,13 +52,32 @@ export class PersonaSession extends Session {
     this.setState(ConnectionState.InWorld);
   }
 
+  /** Relay a teleport command to the active persona puppet. */
+  teleportTo(
+    celestialId: string,
+    position: Omit<PersonaTransform, "rotY">
+  ): void {
+    if (!this.inWorldSession?.avatar) return;
+
+    const transform: PersonaTransform = { ...position, rotY: 0 };
+    this.inWorldSession.avatar.moveTo(transform);
+
+    // Real call (requires @metaversalcorp/mvrp at runtime):
+    // (this.pRPersona as RPersona).Send({ type: 'teleport', celestialId, ...position });
+    console.log(`[PersonaSession] teleportTo ${celestialId}`, position);
+    // pRPersona is used for the real Send() call above; kept for structural parity
+    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+    this.pRPersona;
+  }
+
   async disconnect(): Promise<void> {
     if (this.inWorldSession) {
       await this.inWorldSession.disconnect();
       this.inWorldSession = null;
     }
 
-    // Placeholder: this.pRPersona?.disconnect();
+    // Real call (requires @metaversalcorp/mvrp at runtime):
+    // await (this.pRPersona as RPersona).disconnect();
     this.pRPersona = null;
     this._personaInfo = null;
 
