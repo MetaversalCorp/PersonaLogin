@@ -1,19 +1,16 @@
 /**
- * MV LnG (Log-n-Go) authentication interface and stub client.
+ * MV LnG (Log-n-Go) authentication wrapper.
  *
- * The real implementation is provided by @metaversalcorp/mvmf at runtime.
- * MV LnG manages all HTTP communication with RP1 servers and handles token
- * exchange internally — applications must NOT make direct HTTP calls to the
- * login endpoint.
+ * Loads MSF (Metaversal Service Fabric) configuration from the appropriate CDN
+ * and initializes the real LnG client from @metaversalcorp/mvmf.
  *
- * Real usage (requires @metaversalcorp/mvmf at runtime):
- *   import { LnG, GUEST_EMAIL } from '@metaversalcorp/mvmf';
- *   const pLnG = new LnG();
- *   const user = await pLnG.Login(email, password, remember, finalizationHandler);
+ * Environment detection: checks URL for `?backend=dev` to select the dev CDN.
+ *   Production MSF: https://cdn2.rp1.com/config/enter.msf
+ *   Development MSF: https://cdn2.rp1.dev/config/enter.msf
  */
 
 /** Email constant used to initiate a guest login via LnG. */
-export const GUEST_EMAIL = "guest@rp1.local";
+export const GUEST_EMAIL = "guest@rp1.com";
 
 /** A persona record returned by the LnG user object. */
 export interface LnGPersona {
@@ -62,35 +59,73 @@ export interface ILnGClient {
 }
 
 /**
- * Create an LnG client instance.
+ * Create an LnG client instance backed by real @metaversalcorp/mvmf.
  *
- * Real implementation (requires @metaversalcorp/mvmf at runtime):
- *   import { LnG } from '@metaversalcorp/mvmf';
- *   return new LnG();
+ * MSF configuration is loaded from the appropriate CDN on first use:
+ *   Production: https://cdn2.rp1.com/config/enter.msf
+ *   Development: https://cdn2.rp1.dev/config/enter.msf  (when ?backend=dev)
  *
- * The stub below preserves the same interface so dependent code compiles and
- * type-checks without the private package installed.
+ * Falls back to an error-throwing stub when @metaversalcorp/mvmf is unavailable.
+ * Initialization is performed once at module load time (singleton).
  */
-export function createLnGClient(): ILnGClient {
-  // Real implementation (requires @metaversalcorp/mvmf at runtime):
-  // const { LnG } = await import('@metaversalcorp/mvmf');
-  // return new LnG();
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _pLnG: any = null;
+
+const _initPromise: Promise<void> = (async () => {
+  try {
+    // Use a variable so TypeScript does not statically resolve the private package.
+    const pkg = "@metaversalcorp/mvmf";
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const mvmf: any = await import(pkg);
+    const msfUrl = getMsfConfigUrl();
+    const msf = new mvmf.MSF(msfUrl);
+    await msf.ready();
+    _pLnG = new mvmf.LnG(msf);
+  } catch (err) {
+    // Package not installed or MSF init failed; Login() will throw a clear error.
+    console.error("MV LnG init failed:", err);
+  }
+})();
+
+export function createLnGClient(): ILnGClient {
   return {
     async Login(
-      _email: string,
-      _password?: string,
-      _remember?: boolean,
-      _finalizationHandler?: FinalizationHandler
+      email: string,
+      password?: string,
+      remember?: boolean,
+      finalizationHandler?: FinalizationHandler
     ): Promise<LnGUser> {
-      throw new Error(
-        "MV LnG is not available: @metaversalcorp/mvmf must be present at runtime. " +
-          "Install the package and replace this stub with: new LnG()"
-      );
+      await _initPromise;
+      if (!_pLnG) {
+        throw new Error(
+          "MV LnG is not available: @metaversalcorp/mvmf must be present at runtime"
+        );
+      }
+      return _pLnG.Login(email, password, remember, finalizationHandler);
     },
 
     async Logout(): Promise<void> {
-      // no-op in stub
+      await _initPromise;
+      if (_pLnG) {
+        await _pLnG.Logout();
+      }
     },
   };
+}
+
+/** Returns true when the `?backend=dev` query parameter is present in the page URL. */
+export function isDevEnvironment(): boolean {
+  try {
+    return new URLSearchParams(window.location.search).get("backend") === "dev";
+  } catch {
+    return false;
+  }
+}
+
+/** Returns the MSF configuration URL for the current environment. */
+export function getMsfConfigUrl(): string {
+  return isDevEnvironment()
+    ? "https://cdn2.rp1.dev/config/enter.msf"
+    : "https://cdn2.rp1.com/config/enter.msf";
 }
