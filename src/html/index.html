@@ -468,6 +468,62 @@
                </fragment>
             </div>
          </div>
+
+         <!-- View 4: Persona Picker -->
+         <div id="persona-picker-route" class="window col col-md-8 col-lg-6 col-xl-4 d-none">
+            <div class="tray_root">
+               <h1>Choose Your Persona</h1>
+               <fragment class="w-100">
+                  <div class="card bg-light rounded-5">
+                     <div class="card-body">
+                        <p class="text-secondary mb-3">Select a persona to enter the world, or create a new one.</p>
+                        <div id="persona-list" class="mb-3"></div>
+                        <hr>
+                        <h6 class="mb-2"><i class="fa-solid fa-plus-circle"></i> Create New Persona</h6>
+                        <div class="input-group mb-2">
+                           <div class="form-floating">
+                              <input type="text" class="form-control" id="new-persona-first-name" placeholder="First" maxlength="63">
+                              <label>First Name</label>
+                           </div>
+                           <div class="form-floating">
+                              <input type="text" class="form-control" id="new-persona-last-name" placeholder="Last (optional)" maxlength="63">
+                              <label>Last Name</label>
+                           </div>
+                        </div>
+                        <button class="btn btn-outline-secondary w-100" id="create-persona-button" type="button">
+                           <i class="fa-solid fa-user-plus"></i> Create &amp; Enter
+                        </button>
+                     </div>
+                  </div>
+               </fragment>
+            </div>
+         </div>
+
+         <!-- View 5: Two-Factor Authentication -->
+         <div id="tfa-route" class="window col col-md-8 col-lg-6 col-xl-4 d-none">
+            <div class="tray_root">
+               <h1>Two-Factor Authentication</h1>
+               <fragment class="w-100">
+                  <div class="card bg-light rounded-5">
+                     <form id="tfa-form" autocomplete="off">
+                        <div class="card-body">
+                           <p class="text-secondary mb-3">
+                              <i class="fa-solid fa-shield-halved"></i>
+                              A confirmation code has been sent to your device. Enter it below to continue.
+                           </p>
+                           <div class="form-floating mb-3">
+                              <input type="text" class="form-control form-control-lg" id="tfa-code" placeholder="123456" maxlength="8" autocomplete="one-time-code" inputmode="numeric" tabindex="1" required>
+                              <label><i class="fa-solid fa-key"></i> Confirmation Code</label>
+                           </div>
+                        </div>
+                        <div class="card-footer d-flex gap-3 justify-content-end">
+                           <button class="btn btn-primary" id="tfa-confirm-button" type="submit" tabindex="2">Confirm</button>
+                        </div>
+                     </form>
+                  </div>
+               </fragment>
+            </div>
+         </div>
       </div>
    </div>
 

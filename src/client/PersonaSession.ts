@@ -6,10 +6,12 @@ import type { PersonaTransform } from "../avatar/PersonaPuppet.js";
 /**
  * PersonaSession - manages a pRPersona instance and transitions to InWorldSession.
  * Integrates with @metaversalcorp/mvrp for persona protocol handling.
+ *
+ * Authentication is handled by MV LnG upstream; PersonaSession receives only
+ * the persona ID selected via UserSession.pickPersona().
  */
 export class PersonaSession extends Session {
   readonly personaId: string;
-  private authToken: string;
   private inWorldSession: InWorldSession | null = null;
   private _personaInfo: PersonaInfo | null = null;
 
@@ -19,10 +21,9 @@ export class PersonaSession extends Session {
   // import('@metaversalcorp/mvrp').RPersona
   private pRPersona: unknown = null;
 
-  constructor(personaId: string, authToken: string) {
+  constructor(personaId: string) {
     super();
     this.personaId = personaId;
-    this.authToken = authToken;
   }
 
   get personaInfo(): PersonaInfo | null {
@@ -34,9 +35,10 @@ export class PersonaSession extends Session {
 
     // Real instantiation (requires @metaversalcorp/mvrp at runtime):
     // const { RPersona } = await import('@metaversalcorp/mvrp');
-    // this.pRPersona = new RPersona({ personaId: this.personaId, authToken: this.authToken });
+    // this.pRPersona = new RPersona({ personaId: this.personaId });
     // await (this.pRPersona as RPersona).connect();
-    this.pRPersona = { personaId: this.personaId, authToken: this.authToken };
+    // LnG manages session auth; RPersona receives only the persona ID.
+    this.pRPersona = { personaId: this.personaId };
 
     this._personaInfo = new PersonaInfo(
       this.personaId,
