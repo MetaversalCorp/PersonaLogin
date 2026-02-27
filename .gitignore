@@ -14,3 +14,4 @@ build/
 .env.*.local
 npm-debug.log*
 yarn-debug.log*
+.npmrc
