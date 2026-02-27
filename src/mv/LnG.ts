@@ -88,7 +88,7 @@ function ensureLnGReady(): Promise<void> {
     _msfReady = (async () => {
       try {
         const msfUrl = getMsfConfigUrl();
-        const pFabric = new MV.MVRP.MSF(msfUrl);
+        const pFabric = new MV.MVRP.MSF(msfUrl, MV.MVRP.MSF.eMETHOD.GET);
         await pFabric.pReady;
         _pLnG = pFabric.pLnG;
       } catch (err) {
