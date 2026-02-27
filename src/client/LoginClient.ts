@@ -1,4 +1,6 @@
-import { MV } from "@metaversalcorp/mvmf";
+// MV is a global namespace populated by side-effect imports in LnG.ts.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+declare const MV: any;
 import { createLnGClient, ILnGClient, LnGUser, LnGPersona, GUEST_EMAIL } from "../mv/LnG.js";
 import { UserSession } from "./UserSession.js";
 import { ConnectionState } from "../types/index.js";
