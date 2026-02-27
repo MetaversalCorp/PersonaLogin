@@ -85,16 +85,30 @@ let _msfReady: Promise<void> | null = null;
 
 function ensureLnGReady(): Promise<void> {
   if (!_msfReady) {
-    _msfReady = (async () => {
+    _msfReady = new Promise<void>((resolve, reject) => {
       try {
         const msfUrl = getMsfConfigUrl();
         const pFabric = new MV.MVRP.MSF(msfUrl, MV.MVRP.MSF.eMETHOD.GET);
-        await pFabric.pReady;
-        _pLnG = pFabric.pLnG;
+        const listener = {
+          onReadyState: () => {
+            if (pFabric.IsReady()) {
+              try {
+                _pLnG = pFabric.pLnG;
+                pFabric.Detach(listener);
+                resolve();
+              } catch (err) {
+                pFabric.Detach(listener);
+                reject(err);
+              }
+            }
+          },
+        };
+        pFabric.Attach(listener);
       } catch (err) {
         console.error("MV LnG init failed:", err);
+        reject(err);
       }
-    })();
+    });
   }
   return _msfReady;
 }
