@@ -1,11 +1,18 @@
 # PersonaLogin
 
-This project is configured to run on port 8090.
+Minimal but fully functional Persona authentication and session management client for RP1.
 
-## Usage Instructions
+## Features
 
-1. Clone the repository.
-2. Install dependencies using `npm install`.
-3. Run the application using `npm start`.
+- Real MV library integration
+- TypeScript with strict type safety
+- Minimal dependencies (esbuild, TypeScript)
+- Development server with hot reload
+- Bootstrap 5 UI
+- Complete transaction logging
 
-Make sure to access the application at `http://localhost:8090` instead of the previous port.
+## Quick Start
+
+```bash
+npm install
+npm run dev
