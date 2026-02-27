@@ -1,3 +1,4 @@
+import { MV } from "@metaversalcorp/mvmf";
 import { createLnGClient, ILnGClient, LnGUser, LnGPersona, GUEST_EMAIL } from "../mv/LnG.js";
 import { UserSession } from "./UserSession.js";
 import { ConnectionState } from "../types/index.js";
@@ -258,7 +259,7 @@ export class LoginClient {
   // ─── Auth handlers ─────────────────────────────────────────────────────────
 
   /**
-   * Member login — calls pLnG.Login(email, password, remember, finalizationHandler).
+   * Member login — calls pLnG.Login(MV.MVMF.Encode({ contact, password, remember }), finalizationHandler).
    * MV LnG handles all HTTP communication with RP1 servers internally.
    */
   private async handleMemberLogin(credentials: LoginCredentials): Promise<void> {
@@ -269,10 +270,9 @@ export class LoginClient {
     this.appendStatus("Connecting to RP1 via MV LnG…");
 
     try {
+      const encoded = MV.MVMF.Encode({ contact: credentials.email, password: credentials.password, remember: credentials.remember });
       const user = await this.pLnG.Login(
-        credentials.email,
-        credentials.password,
-        credentials.remember,
+        encoded,
         (resolve2FA) => {
           this.appendStatus("2FA required — enter confirmation code.");
           this.showTfaRoute(resolve2FA);
@@ -290,7 +290,7 @@ export class LoginClient {
   }
 
   /**
-   * Guest login — calls pLnG.Login(GUEST_EMAIL).
+   * Guest login — calls pLnG.Login(MV.MVMF.Encode({ contact: GUEST_EMAIL })).
    * MV LnG uses the GUEST_EMAIL constant to initiate an anonymous session.
    */
   private async handleGuestLogin(): Promise<void> {
@@ -301,7 +301,7 @@ export class LoginClient {
     this.appendStatus("Connecting to RP1 as guest via MV LnG…");
 
     try {
-      const user = await this.pLnG.Login(GUEST_EMAIL);
+      const user = await this.pLnG.Login(MV.MVMF.Encode({ contact: GUEST_EMAIL }));
       this.appendStatus(`Guest session started as "${user.displayName}".`);
       this.updateStatusBadge("success");
       this.showPersonaPicker(user);
