@@ -1,15 +1,15 @@
 /**
  * MV LnG (Log-n-Go) authentication wrapper.
  *
- * Loads MSF (Metaversal Service Fabric) configuration from the appropriate CDN
- * and initializes the real LnG client from @metaversalcorp/mvmf.
+ * Uses MSF (Metaversal Service Fabric) from MV.MVRP to initialize and obtain
+ * the LnG client, following the RP1Demo MV library pattern.
  *
  * Environment detection: checks URL for `?backend=dev` to select the dev CDN.
  *   Production MSF: https://cdn2.rp1.com/config/enter.msf
  *   Development MSF: https://cdn2.rp1.dev/config/enter.msf
  */
 
-import * as mvmf from "@metaversalcorp/mvmf/dist/mjs/MVMF.js";
+import { MV } from "@metaversalcorp/mvmf";
 
 /** Email constant used to initiate a guest login via LnG. */
 export const GUEST_EMAIL = "guest@rp1.com";
@@ -44,15 +44,14 @@ export interface ILnGClient {
   /**
    * Authenticate with RP1.
    *
-   * For member login supply email + password.
-   * For guest login supply only GUEST_EMAIL (password omitted).
+   * Credentials must be encoded with MV.MVMF.Encode() before being passed in.
+   * For member login: MV.MVMF.Encode({ contact, password, remember })
+   * For guest login:  MV.MVMF.Encode({ contact: GUEST_EMAIL })
    *
-   * Real implementation: pLnG.Login(email, password, remember, finalizationHandler)
+   * Real implementation: pLnG.Login(encodedCredentials, finalizationHandler)
    */
   Login(
-    email: string,
-    password?: string,
-    remember?: boolean,
+    encodedCredentials: unknown,
     finalizationHandler?: FinalizationHandler
   ): Promise<LnGUser>;
 
@@ -80,9 +79,9 @@ function ensureLnGReady(): Promise<void> {
     _msfReady = (async () => {
       try {
         const msfUrl = getMsfConfigUrl();
-        const msf = new mvmf.MSF(msfUrl);
-        await msf.ready();
-        _pLnG = new mvmf.LnG(msf);
+        const pFabric = new MV.MVRP.MSF(msfUrl);
+        await pFabric.pReady;
+        _pLnG = pFabric.pLnG;
       } catch (err) {
         console.error("MV LnG init failed:", err);
       }
@@ -94,9 +93,7 @@ function ensureLnGReady(): Promise<void> {
 export function createLnGClient(): ILnGClient {
   return {
     async Login(
-      email: string,
-      password?: string,
-      remember?: boolean,
+      encodedCredentials: unknown,
       finalizationHandler?: FinalizationHandler
     ): Promise<LnGUser> {
       await ensureLnGReady();
@@ -105,7 +102,7 @@ export function createLnGClient(): ILnGClient {
           "MV LnG is not available: @metaversalcorp/mvmf must be present at runtime"
         );
       }
-      return _pLnG.Login(email, password, remember, finalizationHandler);
+      return _pLnG.Login(encodedCredentials, finalizationHandler);
     },
 
     async Logout(): Promise<void> {
