@@ -9,7 +9,16 @@
  *   Development MSF: https://cdn2.rp1.dev/config/enter.msf
  */
 
-import { MV } from "@metaversalcorp/mvmf";
+import "@metaversalcorp/mvmf";
+import "@metaversalcorp/mvrp";
+import "@metaversalcorp/mvrp_fabric";
+import "@metaversalcorp/mvrp_map";
+import "@metaversalcorp/mvxp";
+import "@metaversalcorp/mvio";
+
+// MV libraries are global singletons — imports above populate the MV namespace as a side effect.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+declare const MV: any;
 
 /** Email constant used to initiate a guest login via LnG. */
 export const GUEST_EMAIL = "guest@rp1.com";
