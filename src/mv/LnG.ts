@@ -81,6 +81,8 @@ export interface ILnGClient {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let _pLnG: any = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _pFabric: any = null;
 let _msfReady: Promise<void> | null = null;
 
 function ensureLnGReady(): Promise<void> {
@@ -94,6 +96,7 @@ function ensureLnGReady(): Promise<void> {
             if (pFabric.IsReady()) {
               try {
                 _pLnG = pFabric.pLnG;
+                _pFabric = pFabric;
                 pFabric.Detach(listener);
                 resolve();
               } catch (err) {
@@ -135,6 +138,15 @@ export function createLnGClient(): ILnGClient {
       }
     },
   };
+}
+
+/**
+ * Returns the MSF pFabric instance after initialization, or null if not yet ready.
+ * Used to access service LnGs (e.g. friends) after MSF startup.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function getPFabric(): any {
+  return _pFabric;
 }
 
 /** Returns true when the `?backend=dev` query parameter is present in the page URL. */
