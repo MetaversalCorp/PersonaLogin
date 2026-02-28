@@ -91,6 +91,7 @@ function ensureLnGReady(): Promise<void> {
       try {
         const msfUrl = getMsfConfigUrl();
         const pFabric = new MV.MVRP.MSF(msfUrl, MV.MVRP.MSF.eMETHOD.GET);
+        pFabric.RequestService("friends");
         const listener = {
           onReadyState: () => {
             if (pFabric.IsReady()) {
