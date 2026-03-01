@@ -53,6 +53,8 @@ export function getPFabric(): {
 }
 
 function ensureLnGReady() {
+    if (!MSF) return null;
+
     // Detach previous services if any
     MSF.Detach();
 
