@@ -2,8 +2,6 @@
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 declare const MV: any;
 
-import { Config } from "../config.js";
-
 /** Email sentinel used to initiate an anonymous guest session via MV LnG. */
 export const GUEST_EMAIL = "guest@rp1.com";
 
@@ -35,6 +33,19 @@ export interface ILnGClient {
   ): Promise<LnGUser>;
   /** Sign out of the current session. */
   Logout(): Promise<void>;
+}
+
+/**
+ * Returns the MSF configuration URL based on the `?backend` query parameter.
+ * Any value other than "prod" (including absent) selects the dev environment.
+ *   ?backend=prod  → https://cdn2.rp1.com/config/enter.msf
+ *   otherwise      → https://cdn2_dev.rp1.dev/config/enter.msf
+ */
+function getMsfConfigUrl(): string {
+  const params = new URLSearchParams(window.location.search);
+  const backend = params.get("backend");
+  const domain = backend === "prod" ? ".rp1.com" : "_dev.rp1.dev";
+  return `https://cdn2${domain}/config/enter.msf`;
 }
 
 // Module-level MSF (MV.MVRP.MSF) instance, set by createLnGClient().
@@ -87,11 +98,11 @@ function ensureLnGReady(): Promise<void> {
  * This is the primary entry point for MV LnG authentication in the app.
  *
  * Real authentication flow (requires MV vendor scripts at runtime):
- *   pFabric = new MV.MVRP.MSF(Config.MSF_CONFIG_URL, MV.MVRP.MSF.eMETHOD.GET, null)
+ *   pFabric = new MV.MVRP.MSF(getMsfConfigUrl(), MV.MVRP.MSF.eMETHOD.GET, null)
  *   Login is driven by MV LnG event notifications via Attach/onReadyState.
  */
 export function createLnGClient(): ILnGClient {
-  pFabric = new MV.MVRP.MSF(Config.MSF_CONFIG_URL, MV.MVRP.MSF.eMETHOD.GET, null);
+  pFabric = new MV.MVRP.MSF(getMsfConfigUrl(), MV.MVRP.MSF.eMETHOD.GET, null);
 
   return {
     async Login(
