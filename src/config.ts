@@ -22,9 +22,6 @@ export const Config = {
 
   /** Default persona ID used when none is provided */
   DEFAULT_PERSONA_ID: "default",
-
-  /** URL of the MSF (Metaversal Service Fabric) JSON configuration endpoint */
-  MSF_CONFIG_URL: "https://prod-persona.rp1.com/msf.json",
 } as const;
 
 /** Derived full endpoint URLs */
