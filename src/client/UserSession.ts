@@ -59,7 +59,36 @@ export class UserSession extends Session {
     const pFabric = getPFabric();
     if (pFabric) {
       try {
-        const friendsLnG = pFabric.GetLnG("friends");
+        const FRIENDS_TIMEOUT_MS = 5000;
+        const friendsLnG = await new Promise<unknown>((resolve, reject) => {
+          const timer = setTimeout(() => {
+            pFabric.Detach(listener);
+            reject(new Error("[UserSession] Timed out waiting for friends service"));
+          }, FRIENDS_TIMEOUT_MS);
+
+          // Listener stays attached until the LnG becomes available; once it
+          // does, we detach, clear the timer, and resolve the promise.
+          const listener = {
+            onReadyState: () => {
+              const lnG = pFabric.GetLnG("friends");
+              if (lnG) {
+                clearTimeout(timer);
+                pFabric.Detach(listener);
+                resolve(lnG);
+              }
+            },
+          };
+          pFabric.Attach(listener);
+
+          // Resolve immediately if the service LnG is already available.
+          const lnG = pFabric.GetLnG("friends");
+          if (lnG) {
+            clearTimeout(timer);
+            pFabric.Detach(listener);
+            resolve(lnG);
+          }
+        });
+
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         this.friendsManager = new MV.MVRP.Fabric.FRIENDS(friendsLnG, id);
         this.friendsReadyListener = {
@@ -75,7 +104,7 @@ export class UserSession extends Session {
           this.friendsReadyListener
         );
       } catch (err) {
-        console.warn("[UserSession] Friends service initialization failed:", err);
+        console.error("[UserSession] Friends service initialization failed:", err);
       }
     }
 
