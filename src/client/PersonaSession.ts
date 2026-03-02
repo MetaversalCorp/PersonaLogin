@@ -45,6 +45,8 @@ export class PersonaSession extends Session {
     this.pLnG = getPFabric()?.pLnG ?? null;
     if (this.pLnG) {
       this.pRPersona = this.pLnG.Model_Open('RPersona', this.personaId) ?? { personaId: this.personaId };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (this.pRPersona as any)?.Attach?.(this);
     } else {
       this.pRPersona = { personaId: this.personaId };
     }
