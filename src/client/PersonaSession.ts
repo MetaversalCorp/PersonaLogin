@@ -63,6 +63,7 @@ export class PersonaSession extends Session {
 
     const transform: PersonaTransform = { ...position, rotY: 0 };
     this.inWorldSession.avatar.moveTo(transform);
+    this.inWorldSession.avatar.sendUpdate(celestialId);
     this.sendUpdate(celestialId, transform);
   }
 
@@ -70,29 +71,30 @@ export class PersonaSession extends Session {
   private sendUpdate(celestialId: string, transform: PersonaTransform): void {
     const tmStamp = Date.now();
 
-    // Real call (requires @metaversalcorp/mvrp at runtime):
-    // const rPersona = this.pRPersona as RPersona;
-    // rPersona.Send('UPDATE', {
-    //   tmStamp,
-    //   pState: {
-    //     pPosition_Head: {
-    //       pParent: { twObjectIx: celestialId, wClass: MapModelType.Celestial },
-    //       pRelative: {
-    //         vPosition: { dX: transform.x, dY: transform.y, dZ: transform.z },
-    //       },
-    //     },
-    //     pRotation_Head: {
-    //       dwV: rPersona.Quat_Encode([0, Math.sin(transform.rotY / 2), 0, Math.cos(transform.rotY / 2)]),
-    //     },
-    //     pRotation_Body: {
-    //       dwV: rPersona.Quat_Encode([0, Math.sin(transform.rotY / 2), 0, Math.cos(transform.rotY / 2)]),
-    //     },
-    //   },
-    // });
-    console.log(`[PersonaSession] sendUpdate ${celestialId}`, { tmStamp, transform });
-    // pRPersona is used for the real Send() call above; kept for structural parity
-    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-    this.pRPersona;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rPersona = this.pRPersona as any;
+    if (!rPersona?.Send) {
+      console.log(`[PersonaSession] sendUpdate ${celestialId}`, { tmStamp, transform });
+      return;
+    }
+
+    const sinHalf = Math.sin(transform.rotY / 2);
+    const cosHalf = Math.cos(transform.rotY / 2);
+    const rotDwV = rPersona.Quat_Encode([0, sinHalf, 0, cosHalf]);
+
+    rPersona.Send('UPDATE', {
+      tmStamp,
+      pState: {
+        pPosition_Head: {
+          pParent: { twObjectIx: celestialId, wClass: 0 },
+          pRelative: {
+            vPosition: { dX: transform.x, dY: transform.y, dZ: transform.z },
+          },
+        },
+        pRotation_Head: { dwV: rotDwV },
+        pRotation_Body: { dwV: rotDwV },
+      },
+    });
   }
 
   async disconnect(): Promise<void> {

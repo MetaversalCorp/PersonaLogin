@@ -57,15 +57,47 @@ export class PersonaPuppet extends Avatar {
 
   /**
    * Move the avatar to a new world position.
-   * Calls rPersona.Send() with transform data.
+   * Updates the stored transform; call sendUpdate() to push it to the service.
    */
   moveTo(transform: PersonaTransform): void {
     if (!this._spawned) return;
     this.transform = { ...transform };
-
-    // Real call (requires @metaversalcorp/mvrp at runtime):
-    // (this.rPersona as RPersona).Send({ type: 'move', ...this.transform });
     console.log(`[PersonaPuppet] moveTo`, this.transform);
+  }
+
+  /**
+   * Encode current avatar position/rotation and send an UPDATE to the persona service.
+   * Calls rPersona.Send('UPDATE', ...) with position and rotation state.
+   */
+  sendUpdate(celestialId: string): void {
+    if (!this._spawned) return;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rPersona = this.rPersona as any;
+    if (!rPersona?.Send) return;
+
+    const tmStamp = Date.now();
+    const sinHalf = Math.sin(this.transform.rotY / 2);
+    const cosHalf = Math.cos(this.transform.rotY / 2);
+    const rotDwV = rPersona.Quat_Encode([0, sinHalf, 0, cosHalf]);
+
+    rPersona.Send('UPDATE', {
+      tmStamp,
+      pState: {
+        pPosition_Head: {
+          pParent: { twObjectIx: celestialId, wClass: 0 },
+          pRelative: {
+            vPosition: {
+              dX: this.transform.x,
+              dY: this.transform.y,
+              dZ: this.transform.z,
+            },
+          },
+        },
+        pRotation_Head: { dwV: rotDwV },
+        pRotation_Body: { dwV: rotDwV },
+      },
+    });
   }
 
   /**
