@@ -114,17 +114,19 @@ export class LoginClient {
   private showPersonaPicker(user: LnGUser): void {
     this.pendingUser = user;
 
-    if (user.personas.length === 1) {
+    const personas = user.personas ?? [];
+
+    if (personas.length === 1) {
       // Auto-pick the only persona
-      this.appendStatus(`Auto-picking persona "${user.personas[0].displayName}".`);
-      void this.onPersonaPicked(user.personas[0].id);
+      this.appendStatus(`Auto-picking persona "${personas[0].displayName}".`);
+      void this.onPersonaPicked(personas[0].id);
       return;
     }
 
     const list = this.el("persona-list");
     if (list) {
       list.innerHTML = "";
-      for (const p of user.personas) {
+      for (const p of personas) {
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "btn btn-outline-primary w-100 mb-2";
@@ -135,7 +137,7 @@ export class LoginClient {
       }
     }
 
-    if (user.personas.length === 0) {
+    if (personas.length === 0) {
       this.appendStatus("No personas found. Create a new persona to continue.");
     }
 
