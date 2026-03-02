@@ -48,67 +48,52 @@ export class UserSession extends Session {
 
   /**
    * Select an existing persona by ID and enter the world.
-   * Creates a PersonaSession and transitions state to InWorld.
-   * Initializes the friends service (MV.MVRP.Fabric.FRIENDS) via pFabric.GetLnG("friends").
+   * Creates a PersonaSession and transitions state to InWorld immediately after
+   * puppet spawn. Friends service initialization is optional and non-blocking;
+   * it proceeds asynchronously after world entry and logs a warning if the
+   * friends LnG is not available.
    */
   async pickPersona(id: string): Promise<void> {
     this.setState(ConnectionState.EnteringWorld);
     this.personaSession = new PersonaSession(id);
     await this.personaSession.connect();
 
+    this.setState(ConnectionState.InWorld);
+
+    // Friends service initialization is best-effort and must not block world entry.
+    this._initFriendsService(id).catch((err) => {
+      console.error("[UserSession] Unexpected error in friends service initialization:", err);
+    });
+  }
+
+  private async _initFriendsService(personaId: string): Promise<void> {
     const pFabric = getPFabric();
-    if (pFabric) {
-      try {
-        const FRIENDS_TIMEOUT_MS = 5000;
-        const friendsLnG = await new Promise<unknown>((resolve, reject) => {
-          const timer = setTimeout(() => {
-            pFabric.Detach(listener);
-            reject(new Error("[UserSession] Timed out waiting for friends service"));
-          }, FRIENDS_TIMEOUT_MS);
+    if (!pFabric) return;
 
-          // Listener stays attached until the LnG becomes available; once it
-          // does, we detach, clear the timer, and resolve the promise.
-          const listener = {
-            onReadyState: () => {
-              const lnG = pFabric.GetLnG("friends");
-              if (lnG) {
-                clearTimeout(timer);
-                pFabric.Detach(listener);
-                resolve(lnG);
-              }
-            },
-          };
-          pFabric.Attach(listener);
-
-          // Resolve immediately if the service LnG is already available.
-          const lnG = pFabric.GetLnG("friends");
-          if (lnG) {
-            clearTimeout(timer);
-            pFabric.Detach(listener);
-            resolve(lnG);
-          }
-        });
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        this.friendsManager = new MV.MVRP.Fabric.FRIENDS(friendsLnG, id);
-        this.friendsReadyListener = {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          onReadyState: (pNotice: any) => {
-            if (pNotice.pEmitter !== this.friendsManager) return;
-            if (pNotice.pEmitter.ReadyState() === pNotice.pEmitter.eSTATE.READY) {
-              // Friends service is ready to use
-            }
-          },
-        };
-        (this.friendsManager as { Attach: (listener: object) => void }).Attach(
-          this.friendsReadyListener
-        );
-      } catch (err) {
-        console.error("[UserSession] Friends service initialization failed:", err);
-      }
+    const friendsLnG = pFabric.GetLnG("friends");
+    if (!friendsLnG) {
+      console.warn("[UserSession] Friends service LnG not available; skipping friends initialization");
+      return;
     }
 
-    this.setState(ConnectionState.InWorld);
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      this.friendsManager = new MV.MVRP.Fabric.FRIENDS(friendsLnG, personaId);
+      this.friendsReadyListener = {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        onReadyState: (pNotice: any) => {
+          if (pNotice.pEmitter !== this.friendsManager) return;
+          if (pNotice.pEmitter.ReadyState() === pNotice.pEmitter.eSTATE.READY) {
+            // Friends service is ready to use
+          }
+        },
+      };
+      (this.friendsManager as { Attach: (listener: object) => void }).Attach(
+        this.friendsReadyListener
+      );
+    } catch (err) {
+      console.error("[UserSession] Friends service initialization failed:", err);
+    }
   }
 
   /**
