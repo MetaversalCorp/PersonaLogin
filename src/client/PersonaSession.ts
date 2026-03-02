@@ -2,6 +2,7 @@ import { Session } from "../base/Session.js";
 import { ConnectionState, PersonaInfo } from "../types/index.js";
 import { InWorldSession } from "./InWorldSession.js";
 import type { PersonaTransform } from "../avatar/PersonaPuppet.js";
+import { getPFabric } from "../mv/LnG.js";
 
 /**
  * PersonaSession - manages a pRPersona instance and transitions to InWorldSession.
@@ -21,6 +22,11 @@ export class PersonaSession extends Session {
   // import('@metaversalcorp/mvrp').RPersona
   private pRPersona: unknown = null;
 
+  // pLnG instance retrieved from pFabric at connect time; used to open/close
+  // the RPersona model and must outlive the PersonaSession.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private pLnG: any = null;
+
   constructor(personaId: string) {
     super();
     this.personaId = personaId;
@@ -33,12 +39,15 @@ export class PersonaSession extends Session {
   async connect(): Promise<void> {
     this.setState(ConnectionState.Connecting);
 
-    // Real instantiation (requires @metaversalcorp/mvrp at runtime):
-    // const { RPersona } = await import('@metaversalcorp/mvrp');
-    // this.pRPersona = new RPersona({ personaId: this.personaId });
-    // await (this.pRPersona as RPersona).connect();
-    // LnG manages session auth; RPersona receives only the persona ID.
-    this.pRPersona = { personaId: this.personaId };
+    // Retrieve the pLnG instance that was used during authentication and open
+    // the RPersona model so that Send() can be called on a real object.
+    // Falls back to a stub when MV vendor scripts are absent (open-source builds).
+    this.pLnG = getPFabric()?.pLnG ?? null;
+    if (this.pLnG) {
+      this.pRPersona = this.pLnG.Model_Open('RPersona', this.personaId) ?? { personaId: this.personaId };
+    } else {
+      this.pRPersona = { personaId: this.personaId };
+    }
 
     this._personaInfo = new PersonaInfo(
       this.personaId,
@@ -103,9 +112,12 @@ export class PersonaSession extends Session {
       this.inWorldSession = null;
     }
 
-    // Real call (requires @metaversalcorp/mvrp at runtime):
-    // await (this.pRPersona as RPersona).disconnect();
+    // Close the RPersona model via pLnG when available (requires @metaversalcorp/mvrp at runtime).
+    if (this.pLnG && this.pRPersona) {
+      this.pLnG.Model_Close(this.pRPersona);
+    }
     this.pRPersona = null;
+    this.pLnG = null;
     this._personaInfo = null;
 
     this.setState(ConnectionState.Disconnected);
