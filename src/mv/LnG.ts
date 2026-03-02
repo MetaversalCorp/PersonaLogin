@@ -40,7 +40,8 @@ export interface ILnGClient {
  * Always uses the production CDN which has CORS headers enabled.
  */
 function getMsfConfigUrl(): string {
-  return "https://cdn2.rp1.com/config/enter.msf";
+  return "https://cdn.rp1.com/res/apps/persona.msf.json";
+  //  return "https://cdn2.rp1.com/config/enter.msf";
 }
 
 // Module-level MSF (MV.MVRP.MSF) instance, set by createLnGClient().
@@ -67,25 +68,25 @@ export function getPFabric(): any {
  * persona selection.
  */
 function ensureLnGReady(): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
-        const READY_TIMEOUT_MS = 30_000;
-        const timer = setTimeout(() => {
-            pFabric.Detach(listener);
-            reject(new Error("[LnG] Timed out waiting for MSF to become ready"));
-        }, READY_TIMEOUT_MS);
+  return new Promise<void>((resolve, reject) => {
+    const READY_TIMEOUT_MS = 30_000;
+    const timer = setTimeout(() => {
+      pFabric.Detach(listener);
+      reject(new Error("[LnG] Timed out waiting for MSF to become ready"));
+    }, READY_TIMEOUT_MS);
 
-        const listener = {
-            onReadyState: () => {
-                if (pFabric.IsReady()) {
-                    clearTimeout(timer);
-                    pFabric.Detach(listener);
-                    resolve();
-                }
-            },
-        };
+    const listener = {
+      onReadyState: () => {
+        if (pFabric.IsReady()) {
+          clearTimeout(timer);
+          pFabric.Detach(listener);
+          resolve();
+        }
+      },
+    };
 
-        pFabric.Attach(listener);
-    });
+    pFabric.Attach(listener);
+  });
 }
 
 /**
