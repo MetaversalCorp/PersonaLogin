@@ -292,8 +292,8 @@ export class LoginClient {
   }
 
   /**
-   * Guest login — calls pLnG.Login(MV.MVMF.Encode({ contact: GUEST_EMAIL })).
-   * MV LnG uses the GUEST_EMAIL constant to initiate an anonymous session.
+   * Guest login — calls pLnG.Login(MV.MVMF.Encode({ contact: GUEST_EMAIL, password: GUEST_EMAIL })).
+   * MV LnG requires both contact and password fields to initiate an anonymous session.
    */
   private async handleGuestLogin(): Promise<void> {
     const btn = this.el<HTMLButtonElement>("guest-join-button");
@@ -303,7 +303,7 @@ export class LoginClient {
     this.appendStatus("Connecting to RP1 as guest via MV LnG…");
 
     try {
-      const user = await this.pLnG.Login(MV.MVMF.Encode({ contact: GUEST_EMAIL }));
+      const user = await this.pLnG.Login(MV.MVMF.Encode({ contact: GUEST_EMAIL, password: GUEST_EMAIL }));
       this.appendStatus(`Guest session started as "${user.displayName}".`);
       this.updateStatusBadge("success");
       this.showPersonaPicker(user);
