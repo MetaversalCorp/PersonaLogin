@@ -245,8 +245,8 @@ export class LoginClient {
         const celestial = btn.dataset["celestial"] ?? "";
         const lat = btn.dataset["lat"] ?? "0";
         const lon = btn.dataset["lon"] ?? "0";
-        const alt = btn.dataset["alt"] ?? "0";
-        this.setTeleportInputs(celestial, lat, lon, alt);
+        const radius = btn.dataset["radius"] ?? "6371000";
+        this.setTeleportInputs(celestial, lat, lon, radius);
         this.handleTeleport();
       });
     });
@@ -376,7 +376,7 @@ export class LoginClient {
     celestial: string,
     lat: string,
     lon: string,
-    alt: string
+    radius: string
   ): void {
     const set = (id: string, val: string): void => {
       const el = this.el<HTMLInputElement>(id);
@@ -385,7 +385,7 @@ export class LoginClient {
     set("celestial-id", celestial);
     set("teleport-latitude", lat);
     set("teleport-longitude", lon);
-    set("teleport-altitude", alt);
+    set("teleport-radius", radius);
   }
 
   private handleTeleport(): void {
@@ -397,20 +397,16 @@ export class LoginClient {
     const lon = parseFloat(
       this.el<HTMLInputElement>("teleport-longitude")?.value ?? "0"
     );
-    const alt = parseFloat(
-      this.el<HTMLInputElement>("teleport-altitude")?.value ?? "0"
+    const radius = parseFloat(
+      this.el<HTMLInputElement>("teleport-radius")?.value ?? "0"
     );
 
-    if (!celestial || isNaN(lat) || isNaN(lon) || isNaN(alt)) {
+    if (!celestial || isNaN(lat) || isNaN(lon) || isNaN(radius)) {
       this.appendStatus("Teleport: invalid coordinates.");
       return;
     }
 
-    // Convert lat/lon/alt to cartesian offsets (simplified flat-earth approx)
-    const R = 6_371_000; // Earth radius in metres
-    const dx = (lon * Math.PI * R) / 180;
-    const dy = alt;
-    const dz = (lat * Math.PI * R) / 180;
+    const [dx, dy, dz] = latLonToCartesianYUp(lat, lon, radius);
 
     const fmt = (n: number): string => n.toFixed(2);
     const elDx = this.el("coord-dx");
@@ -424,15 +420,32 @@ export class LoginClient {
     const elPosition = this.el("current-position");
     if (elCelestial) elCelestial.textContent = celestial;
     if (elPosition) {
-      elPosition.textContent = `${Math.abs(lat).toFixed(4)}°${lat >= 0 ? "N" : "S"}, ${Math.abs(lon).toFixed(4)}°${lon >= 0 ? "E" : "W"}, ${alt}m`;
+      elPosition.textContent = `${Math.abs(lat).toFixed(4)}°${lat >= 0 ? "N" : "S"}, ${Math.abs(lon).toFixed(4)}°${lon >= 0 ? "E" : "W"}, ${radius}m`;
     }
 
     // Send teleport via persona puppet if in-world session is active
     this.userSession?.teleportTo(celestial, { x: dx, y: dy, z: dz });
 
     this.appendStatus(
-      `Teleport → ${celestial} lat=${lat} lon=${lon} alt=${alt}m`
+      `Teleport → ${celestial} lat=${lat} lon=${lon} radius=${radius}m`
     );
     this.updateSessionInfo();
   }
+}
+
+export function latLonToCartesianYUp(
+  latDeg: number,
+  lonDeg: number,
+  radius: number
+): [number, number, number] {
+  const lat = latDeg * Math.PI / 180;
+  const lon = lonDeg * Math.PI / 180;
+
+  const cosLat = Math.cos(lat);
+
+  const x = radius * cosLat * Math.sin(lon);
+  const y = radius * Math.sin(lat);
+  const z = radius * cosLat * Math.cos(lon);
+
+  return [x, y, z];
 }
