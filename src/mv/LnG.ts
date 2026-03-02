@@ -36,16 +36,11 @@ export interface ILnGClient {
 }
 
 /**
- * Returns the MSF configuration URL based on the `?backend` query parameter.
- * Any value other than "prod" (including absent) selects the dev environment.
- *   ?backend=prod  → https://cdn2.rp1.com/config/enter.msf
- *   otherwise      → https://cdn2_dev.rp1.dev/config/enter.msf
+ * Returns the MSF configuration URL.
+ * Always uses the production CDN which has CORS headers enabled.
  */
 function getMsfConfigUrl(): string {
-  const params = new URLSearchParams(window.location.search);
-  const backend = params.get("backend");
-  const domain = backend === "prod" ? ".rp1.com" : "_dev.rp1.dev";
-  return `https://cdn2${domain}/config/enter.msf`;
+  return "https://cdn2.rp1.com/config/enter.msf";
 }
 
 // Module-level MSF (MV.MVRP.MSF) instance, set by createLnGClient().
