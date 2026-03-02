@@ -63,10 +63,33 @@ export class PersonaSession extends Session {
 
     const transform: PersonaTransform = { ...position, rotY: 0 };
     this.inWorldSession.avatar.moveTo(transform);
+    this.sendUpdate(celestialId, transform);
+  }
+
+  /** Encode current avatar position/rotation and send an UPDATE to the persona service. */
+  private sendUpdate(celestialId: string, transform: PersonaTransform): void {
+    const tmStamp = Date.now();
 
     // Real call (requires @metaversalcorp/mvrp at runtime):
-    // (this.pRPersona as RPersona).Send({ type: 'teleport', celestialId, ...position });
-    console.log(`[PersonaSession] teleportTo ${celestialId}`, position);
+    // const rPersona = this.pRPersona as RPersona;
+    // rPersona.Send('UPDATE', {
+    //   tmStamp,
+    //   pState: {
+    //     pPosition_Head: {
+    //       pParent: { twObjectIx: celestialId, wClass: MapModelType.Celestial },
+    //       pRelative: {
+    //         vPosition: { dX: transform.x, dY: transform.y, dZ: transform.z },
+    //       },
+    //     },
+    //     pRotation_Head: {
+    //       dwV: rPersona.Quat_Encode([0, Math.sin(transform.rotY / 2), 0, Math.cos(transform.rotY / 2)]),
+    //     },
+    //     pRotation_Body: {
+    //       dwV: rPersona.Quat_Encode([0, Math.sin(transform.rotY / 2), 0, Math.cos(transform.rotY / 2)]),
+    //     },
+    //   },
+    // });
+    console.log(`[PersonaSession] sendUpdate ${celestialId}`, { tmStamp, transform });
     // pRPersona is used for the real Send() call above; kept for structural parity
     // eslint-disable-next-line @typescript-eslint/no-unused-expressions
     this.pRPersona;
