@@ -47,7 +47,7 @@ export class UserSession extends Session {
 
   /**
    * Initialize the UserSession by opening the RUser model via pLnG.
-   * Reads the user's persona list from pRUser.ownPersonaList.
+   * Listen for onReadyState and enumerate existing personas via Child_Enum.
    */
   async connect(): Promise<void> {
     this.setState(ConnectionState.Connecting);
@@ -57,13 +57,71 @@ export class UserSession extends Session {
       const pRUser = pLnG.Model_Open('RUser', this.user.id);
       if (pRUser) {
         this._pRUser = pRUser;
-        this._ownPersonaList = [...(pRUser.ownPersonaList ?? [])];
+        console.log('[UserSession] RUser model opened, attaching listener for ready state');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (pRUser as any).Attach(this);
       }
-    } else {
-      this._ownPersonaList = [...this.user.personas];
     }
 
     this.setState(ConnectionState.Connected);
+  }
+
+  /**
+   * Called by MV library when pRUser ready state changes.
+   * Enumerates existing personas when RUser is RECOVERED.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onReadyState(_pNotice: any): void {
+    if (!this._pRUser) return;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const pRUser = this._pRUser as any;
+    const readyState = pRUser.ReadyState?.();
+
+    console.log('[UserSession] onReadyState fired, readyState:', readyState);
+
+    if (pRUser.eSTATE?.RECOVERED !== undefined && readyState === pRUser.eSTATE.RECOVERED) {
+      console.log('[UserSession] RUser state is RECOVERED, enumerating personas...');
+      this.enumeratePersonas();
+    }
+  }
+
+  /**
+   * Enumerate existing personas using Child_Enum like RP1Demo does.
+   */
+  private enumeratePersonas(): void {
+    if (!this._pRUser) return;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const pRUser = this._pRUser as any;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const enumCallback = (rPersona: any): boolean => {
+      const personaId = rPersona.twRPersonaIx;
+      const personaName = rPersona.pName;
+      const displayName = [personaName?.wsForename, personaName?.wsSurname]
+        .filter(Boolean)
+        .join(' ') || `Persona_${personaId}`;
+
+      const persona: LnGPersona = {
+        id: String(personaId),
+        displayName,
+        firstName: personaName?.wsForename || '',
+        lastName: personaName?.wsSurname || '',
+      };
+
+      this._ownPersonaList.push(persona);
+      console.log(`[UserSession] Found persona: ${displayName} (ID: ${personaId})`);
+
+      return true; // Continue enumeration
+    };
+
+    try {
+      pRUser.Child_Enum('RPersona', this, enumCallback);
+      console.log(`[UserSession] Persona enumeration complete. Found ${this._ownPersonaList.length} personas`);
+    } catch (err) {
+      console.error('[UserSession] Child_Enum failed:', err);
+    }
   }
 
   /**
@@ -89,6 +147,9 @@ export class UserSession extends Session {
 
     const pLnG = this.pLnG;
     if (pLnG && this._pRUser) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const pRUser = this._pRUser as any;
+      pRUser.Detach(this);
       pLnG.Model_Close(this._pRUser);
     }
     this._pRUser = null;
@@ -114,10 +175,13 @@ export class UserSession extends Session {
     firstName?: string,
     lastName?: string
   ): void {
-    this._personaSession = new PersonaSession(id, this.pLnG, firstName, lastName, this);
+    this._personaSession = new PersonaSession(id, this.pLnG, this._pRUser, firstName, lastName);
     void this._personaSession.connect().then(() => {
       this._initFriendsService();
       resolve();
+    }).catch((err) => {
+      console.error('[UserSession] PersonaSession.connect failed:', err);
+      throw err;
     });
   }
 
