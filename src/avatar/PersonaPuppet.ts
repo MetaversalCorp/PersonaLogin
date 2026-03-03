@@ -52,9 +52,9 @@ export class PersonaPuppet extends Avatar {
 
   /**
    * Move the avatar to a new world position and transmit it to the service.
-   * @param celestialId - The pParent celestial body identifier; defaults to '0'.
+   * @param celestialId - The pParent celestial body identifier; defaults to '104'.
    */
-  moveTo(transform: PersonaTransform, celestialId: string = '0'): void {
+  moveTo(transform: PersonaTransform, celestialId: string = '104'): void {
     if (!this._spawned) return;
     this.transform = { ...transform };
     console.log(`[PersonaPuppet] moveTo`, this.transform);
@@ -65,7 +65,7 @@ export class PersonaPuppet extends Avatar {
    * Encode current avatar position/rotation and send an UPDATE to the persona service.
    * Calls rPersona.Send('UPDATE', ...) with position and rotation state.
    */
-  sendUpdate(celestialId: string): void {
+  sendUpdate(celestialId: string = '104'): void {
     if (!this._spawned) return;
 
     const rPersona = this.getRPersona();
