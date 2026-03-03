@@ -119,6 +119,17 @@ export class UserSession extends Session {
     try {
       pRUser.Child_Enum('RPersona', this, enumCallback);
       console.log(`[UserSession] Persona enumeration complete. Found ${this._ownPersonaList.length} personas`);
+
+      // Auto-pick the first persona (no persona picker needed)
+      if (this._ownPersonaList.length > 0) {
+        const firstPersona = this._ownPersonaList[0];
+        console.log(`[UserSession] Auto-picking first persona: ${firstPersona.displayName} (ID: ${firstPersona.id})`);
+        void this.pickPersona(firstPersona.id).catch((err) => {
+          console.error('[UserSession] Auto-pick persona failed:', err);
+        });
+      } else {
+        console.warn('[UserSession] No personas found - user needs to create one');
+      }
     } catch (err) {
       console.error('[UserSession] Child_Enum failed:', err);
     }

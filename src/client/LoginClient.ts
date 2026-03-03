@@ -108,38 +108,21 @@ export class LoginClient {
   // ─── Persona picker ────────────────────────────────────────────────────────
 
   /**
-   * Populate the persona picker list and show the route.
-   * Auto-picks the first persona when only one exists.
+   * Auto-pick the first persona without showing the picker UI.
    */
   private showPersonaPicker(user: LnGUser): void {
     this.pendingUser = user;
 
-    if (user.personas.length === 1) {
-      // Auto-pick the only persona
+    if (user.personas.length > 0) {
       this.appendStatus(`Auto-picking persona "${user.personas[0].displayName}".`);
-      void this.onPersonaPicked(user.personas[0].id);
-      return;
-    }
-
-    const list = this.el("persona-list");
-    if (list) {
-      list.innerHTML = "";
-      for (const p of user.personas) {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "btn btn-outline-primary w-100 mb-2";
-        btn.textContent = p.displayName || `${p.firstName} ${p.lastName}`.trim();
-        btn.dataset["personaId"] = p.id;
-        btn.addEventListener("click", () => void this.onPersonaPicked(p.id));
-        list.appendChild(btn);
-      }
-    }
-
-    if (user.personas.length === 0) {
+      void this.onPersonaPicked(user.personas[0].id).catch((err) => {
+        this.updateStatusBadge("error");
+        this.appendStatus(`Persona error: ${(err as Error).message}`);
+      });
+    } else {
       this.appendStatus("No personas found. Create a new persona to continue.");
+      this.showRoute("persona-picker-route");
     }
-
-    this.showRoute("persona-picker-route");
   }
 
   private async onPersonaPicked(personaId: string): Promise<void> {
