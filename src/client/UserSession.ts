@@ -19,16 +19,16 @@ interface SimpleGeoPos {
  * Convert a simple lat/lon/radius geo position to a Double3 cartesian vector
  * in the Y-up coordinate system used by the MV position protocol.
  */
-function geoPosSimpleToDouble3(geoPos: SimpleGeoPos): { dX: number; dY: number; dZ: number } {
+function geoPosSimpleToDouble3(geoPos: SimpleGeoPos): Float64Array {
   const lat = geoPos.lat * Math.PI / 180;
   const lon = geoPos.lon * Math.PI / 180;
   const r = geoPos.radius;
   const cosLat = Math.cos(lat);
-  return {
-    dX: r * cosLat * Math.sin(lon),
-    dY: r * Math.sin(lat),
-    dZ: r * cosLat * Math.cos(lon),
-  };
+  return new Float64Array([
+    r * cosLat * Math.sin(lon),
+    r * Math.sin(lat),
+    r * cosLat * Math.cos(lon),
+  ]);
 }
 
 /**
