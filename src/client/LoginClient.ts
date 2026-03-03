@@ -32,13 +32,23 @@ const PERSONA_ENUM_WAIT_MS = 500;
  *   the user submits the code.
  */
 export class LoginClient {
-  private pLnG: ILnGClient;
+  private _pLnG: ILnGClient;
   private userSession: UserSession | null = null;
   private pendingUser: LnGUser | null = null;
 
   constructor(_container: HTMLElement) {
-    this.pLnG = createLnGClient();
+    this._pLnG = createLnGClient();
     this.bindUI();
+  }
+
+  // ─── Public getters ────────────────────────────────────────────────────────
+
+  /**
+   * Public accessor for pLnG instance.
+   * Required by UserSession and PersonaSession constructors.
+   */
+  get pLnG(): ILnGClient {
+    return this._pLnG;
   }
 
   // ─── UI helpers ────────────────────────────────────────────────────────────
@@ -259,7 +269,7 @@ export class LoginClient {
 
     try {
       const encoded = MV.MVMF.Encode({ contact: credentials.email, password: credentials.password, remember: credentials.remember });
-      const user = await this.pLnG.Login(
+      const user = await this._pLnG.Login(
         encoded,
         (resolve2FA) => {
           this.appendStatus("2FA required — enter confirmation code.");
@@ -311,7 +321,7 @@ export class LoginClient {
     this.appendStatus("Connecting to RP1 as guest via MV LnG…");
 
     try {
-      const user = await this.pLnG.Login(MV.MVMF.Encode({ contact: GUEST_EMAIL, password: GUEST_EMAIL }));
+      const user = await this._pLnG.Login(MV.MVMF.Encode({ contact: GUEST_EMAIL, password: GUEST_EMAIL }));
       this.appendStatus(`Guest session started.`);
       this.updateStatusBadge("success");
 
@@ -355,7 +365,7 @@ export class LoginClient {
   }
 
   private async handleLogout(): Promise<void> {
-    await this.pLnG.Logout();
+    await this._pLnG.Logout();
     if (this.userSession) {
       await this.userSession.disconnect();
       this.userSession = null;
