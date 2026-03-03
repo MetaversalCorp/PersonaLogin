@@ -55,7 +55,9 @@ export class UserSession extends Session {
    */
   async pickPersona(id: string): Promise<void> {
     this.setState(ConnectionState.EnteringWorld);
-    this.personaSession = new PersonaSession(id);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const pLnG: any = getPFabric()?.pLnG ?? null;
+    this.personaSession = new PersonaSession(id, pLnG);
     await this.personaSession.connect();
 
     this.setState(ConnectionState.InWorld);

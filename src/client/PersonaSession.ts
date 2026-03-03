@@ -2,7 +2,6 @@ import { Session } from "../base/Session.js";
 import { ConnectionState, PersonaInfo } from "../types/index.js";
 import { InWorldSession } from "./InWorldSession.js";
 import type { PersonaTransform } from "../avatar/PersonaPuppet.js";
-import { getPFabric } from "../mv/LnG.js";
 
 
 /**
@@ -23,14 +22,15 @@ export class PersonaSession extends Session {
   // import('@metaversalcorp/mvrp').RPersona
   private _pRPersona: unknown = null;
 
-  // pLnG instance retrieved from pFabric at connect time; used to open/close
+  // pLnG instance passed from UserSession via constructor; used to open/close
   // the RPersona model and must outlive the PersonaSession.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private pLnG: any = null;
+  private pLnG: any;
 
-  constructor(personaId: string) {
+  constructor(personaId: string, pLnG: any) {
     super();
     this.personaId = personaId;
+    this.pLnG = pLnG;
   }
 
   get personaInfo(): PersonaInfo | null {
@@ -44,17 +44,17 @@ export class PersonaSession extends Session {
   async connect(): Promise<void> {
     this.setState(ConnectionState.Connecting);
 
-    // Retrieve the pLnG instance that was used during authentication and open
-    // the RPersona model so that Send() can be called on a real object.
-    // Falls back to a stub when MV vendor scripts are absent (open-source builds).
-    this.pLnG = getPFabric()?.pLnG ?? null;
-    if (this.pLnG) {
-      this._pRPersona = this.pLnG.Model_Open('RPersona', this.personaId) ?? { personaId: this.personaId };
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (this._pRPersona as any)?.Attach?.(this);
-    } else {
-      this._pRPersona = { personaId: this.personaId };
+    // Use the pLnG instance passed from UserSession to open the RPersona model.
+    if (!this.pLnG) {
+      throw new Error(`[PersonaSession] pLnG is not available; cannot open RPersona model`);
     }
+    const pRPersona = this.pLnG.Model_Open('RPersona', this.personaId);
+    if (!pRPersona) {
+      throw new Error(`[PersonaSession] Model_Open('RPersona', '${this.personaId}') returned null`);
+    }
+    this._pRPersona = pRPersona;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (this._pRPersona as any).Attach(this);
 
     this._personaInfo = new PersonaInfo(
       this.personaId,
