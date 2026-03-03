@@ -294,7 +294,7 @@ export class LoginClient {
   /**
    * Guest login — calls pLnG.Login(MV.MVMF.Encode({ contact: GUEST_EMAIL, password: GUEST_EMAIL })).
    * MV LnG requires both contact and password fields to initiate an anonymous session.
-   * Uses openPersona(0) to open a persona via RPERSONA_OPEN without name parameters.
+   * Guests skip RPERSONA_OPEN and go directly to RPERSONA_ENTER via pickPersona().
    */
   private async handleGuestLogin(): Promise<void> {
     const btn = this.el<HTMLButtonElement>("guest-join-button");
@@ -311,9 +311,9 @@ export class LoginClient {
       this.userSession = new UserSession(user);
       await this.userSession.connect();
 
-      const guestPersonaId = Number(this.userSession.ownPersonaList[0]?.id ?? 0);
-      this.appendStatus(`Opening persona…`);
-      await this.userSession.openPersona(guestPersonaId);
+      const personaId = this.userSession.ownPersonaList[0]?.id ?? "0";
+      this.appendStatus(`Opening persona ${personaId}…`);
+      await this.userSession.pickPersona(personaId);
       this.onSessionStarted();
     } catch (err) {
       this.updateStatusBadge("error");
@@ -336,7 +336,7 @@ export class LoginClient {
 
     this.appendStatus(`Opening persona…`);
     try {
-      await this.userSession.openPersona(0);
+      await this.userSession.pickPersona("0");
       this.onSessionStarted();
     } catch (err) {
       this.updateStatusBadge("error");
