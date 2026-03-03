@@ -184,8 +184,8 @@ export class UserSession extends Session {
       const geoPosScattered = applyScatterToStartGeoPos(this._startGeoPos);
       const requestData = {
         twRUserIx: this.user.twUserIx,
-        // qwMapIx_Home: 0 — plain number; server assigns a default home map.
-        qwMapIx_Home: 0,
+        // qwMapIx_Home: 0n — BigInt zero; server assigns a default home map.
+        qwMapIx_Home: 0n,
         pName: {
           wsForename: firstName,
           wsSurname: lastName ?? '',
