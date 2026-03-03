@@ -119,13 +119,17 @@ export class PersonaSession extends Session {
   }
 
   /**
-   * Enter the world with this persona by sending RPERSONA_ENTER to the persona model.
+   * Enter the world with this persona by sending RPERSONA_ENTER on pRUser (matching RP1Demo flow).
    * Sends position data matching RP1Demo's guest flow.
    * PersonaPuppet then handles ongoing position updates.
    */
   private async enterPersona(): Promise<void> {
     if (!this._pRPersona) {
       throw new Error('[PersonaSession] RPersona model not open');
+    }
+
+    if (!this.pRUser) {
+      throw new Error('[PersonaSession] pRUser not available for RPERSONA_ENTER');
     }
 
     const pPosition = {
@@ -138,8 +142,10 @@ export class PersonaSession extends Session {
       },
     };
 
+    console.log(`[enterPersona] Calling RPERSONA_ENTER on pRUser for persona ${this.personaId}`);
+
     return promisifyAction(
-      this._pRPersona,
+      this.pRUser,
       'RPERSONA_ENTER',
       {
         twRPersonaIx: Number(this.personaId),
