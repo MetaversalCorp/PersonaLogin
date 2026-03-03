@@ -126,18 +126,13 @@ export class UserSession extends Session {
         this._pRUser,
         'RPERSONA_OPEN',
         {
-          // qwMapIx_Home: 0 — server assigns a default home map for the new persona.
-          qwMapIx_Home: 0,
+          // qwMapIx_Home: 0n — server assigns a default home map for the new persona.
+          qwMapIx_Home: 0n,
           pName: {
             wsForename: firstName,
             wsSurname: lastName ?? '',
             // dwSequence: 0 — server assigns the disambiguation sequence number.
             dwSequence: 0,
-          },
-          pPosition: {
-            // twObjectIx/wClass: 0 — server assigns the starting celestial object.
-            pParent: { twObjectIx: 0, wClass: 0 },
-            pRelative: { vPosition: { dX: 0, dY: 0, dZ: 0 } },
           },
         },
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
