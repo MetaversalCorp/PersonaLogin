@@ -5,6 +5,41 @@ import { PersonaSession } from './PersonaSession.js';
 import type { PersonaTransform } from '../avatar/PersonaPuppet.js';
 
 /**
+ * Wraps a model's Send() call in a Promise using the callback pattern required
+ * by the MV server action protocol.
+ *
+ * @param pModel    The model object (e.g. pRUser) with a Send() method.
+ * @param sAction   The action name (e.g. 'RPERSONA_OPEN').
+ * @param pData     Request fields to merge into pIAction.pRequest.
+ * @param callback  Called with the completed pIAction; may be async and should
+ *                  call pIAction.GetResult() to check for errors.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function promisifyAction<T>(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  pModel: any,
+  sAction: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  pData: Record<string, any>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  callback: (pIAction: any) => Promise<T>
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sent = pModel.Send(sAction, pData, null, async (pIAction: any) => {
+      try {
+        resolve(await callback(pIAction));
+      } catch (err) {
+        reject(err);
+      }
+    });
+    if (!sent) {
+      reject(new Error(`[promisifyAction] Failed to send action '${sAction}'`));
+    }
+  });
+}
+
+/**
  * UserSession — manages the authenticated user's RUser model and delegates
  * persona lifecycle to PersonaSession.
  *
@@ -84,12 +119,44 @@ export class UserSession extends Session {
    */
   async createPersona(firstName: string, lastName?: string): Promise<void> {
     const pLnG = this.pLnG;
+    let personaId: string;
+
     if (pLnG && this._pRUser) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (this._pRUser as any).Server_Action('RPERSONA_OPEN', { firstName, lastName: lastName ?? '' });
+      personaId = await promisifyAction(
+        this._pRUser,
+        'RPERSONA_OPEN',
+        {
+          // qwMapIx_Home: 0 — server assigns a default home map for the new persona.
+          qwMapIx_Home: 0,
+          pName: {
+            wsForename: firstName,
+            wsSurname: lastName ?? '',
+            // dwSequence: 0 — server assigns the disambiguation sequence number.
+            dwSequence: 0,
+          },
+          pPosition: {
+            // twObjectIx/wClass: 0 — server assigns the starting celestial object.
+            pParent: { twObjectIx: 0, wClass: 0 },
+            pRelative: { vPosition: { dX: 0, dY: 0, dZ: 0 } },
+          },
+        },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        async (pIAction: any) => {
+          const result = pIAction.GetResult();
+          if (result !== 0) {
+            throw new Error(`Persona creation failed (error ${result})`);
+          }
+          const twRPersonaIx = pIAction.pResponse?.twRPersonaIx;
+          if (!twRPersonaIx) {
+            throw new Error('Persona creation failed: server returned no persona ID');
+          }
+          return String(twRPersonaIx);
+        }
+      );
+    } else {
+      personaId = `${firstName}${lastName ? `_${lastName}` : ''}_${Date.now()}`;
     }
 
-    const personaId = `${firstName}${lastName ? `_${lastName}` : ''}_${Date.now()}`;
     this._personaSession = new PersonaSession(personaId, pLnG, firstName, lastName);
     await this._personaSession.connect();
     this._initFriendsService();
