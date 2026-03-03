@@ -100,6 +100,15 @@ export class UserSession extends Session {
   /** Starting geographic position used as the base for new-persona spawn scatter. */
   private _startGeoPos: SimpleGeoPos = { lat: 0, lon: 0, radius: 6_371_000 };
 
+  /** Public accessor for the starting geographic position. */
+  get startingLocationGeoPos(): SimpleGeoPos {
+    return this._startGeoPos;
+  }
+
+  set startingLocationGeoPos(value: SimpleGeoPos) {
+    this._startGeoPos = value;
+  }
+
   constructor(user: LnGUser) {
     super();
     this.user = user;
@@ -167,29 +176,33 @@ export class UserSession extends Session {
 
     if (pLnG && this._pRUser) {
       const geoPosScattered = applyScatterToStartGeoPos(this._startGeoPos);
+      const requestData = {
+        twRUserIx: this.user.twUserIx,
+        // twSecureDoorIx: 0n — required TWORD8 field in RPERSONA_OPEN MAP; 0 means no secure door.
+        twSecureDoorIx: BigInt(0),
+        // qwMapIx_Home: 0 — plain number; server assigns a default home map.
+        qwMapIx_Home: 0,
+        pName: {
+          wsForename: firstName,
+          wsSurname: lastName ?? '',
+          // dwSequence: 0 — server assigns the disambiguation sequence number.
+          dwSequence: 0,
+        },
+        pPosition: {
+          pParent: {
+            twObjectIx: this.startingLocationCelestialID,
+            wClass: MV.MVMF.Core.Namespace_Get('metaversal/rp1').SourceClass_Get('MVSB', 'RMCObject').pSource_Factory.pReference.wClass,
+          },
+          pRelative: {
+            vPosition: geoPosSimpleToDouble3(geoPosScattered),
+          },
+        },
+      };
+      console.debug('[createPersona] RPERSONA_OPEN request:', JSON.stringify(requestData, (_, v) => typeof v === 'bigint' ? v.toString() : v));
       await promisifyAction(
         this._pRUser,
         'RPERSONA_OPEN',
-        {
-          twRUserIx: BigInt(this.user.id),
-          // qwMapIx_Home: 0 — plain number; server assigns a default home map.
-          qwMapIx_Home: 0,
-          pName: {
-            wsForename: firstName,
-            wsSurname: lastName ?? '',
-            // dwSequence: 0 — server assigns the disambiguation sequence number.
-            dwSequence: 0,
-          },
-          pPosition: {
-            pParent: {
-              twObjectIx: this.startingLocationCelestialID,
-              wClass: MV.MVMF.Core.Namespace_Get('metaversal/rp1').SourceClass_Get('MVSB', 'RMCObject').pSource_Factory.pReference.wClass,
-            },
-            pRelative: {
-              vPosition: geoPosSimpleToDouble3(geoPosScattered),
-            },
-          },
-        },
+        requestData,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         async (pIAction: any) => {
           const result = pIAction.GetResult();
