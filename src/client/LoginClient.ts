@@ -12,6 +12,9 @@ export interface LoginCredentials {
   remember?: boolean;
 }
 
+/** Time (ms) to wait for the RUser model's onReadyState + Child_Enum to complete. */
+const PERSONA_ENUM_WAIT_MS = 500;
+
 /**
  * LoginClient — drives the RP1 login UI in index.html.
  *
@@ -130,7 +133,7 @@ export class LoginClient {
     const user = this.pendingUser;
     this.pendingUser = null;
 
-    this.userSession = new UserSession(user);
+    this.userSession = new UserSession(user, this);
     await this.userSession.connect();
 
     this.appendStatus(`Entering world with persona ${personaId}…`);
@@ -265,7 +268,28 @@ export class LoginClient {
       );
       this.appendStatus(`Authenticated as "${user.displayName}".`);
       this.updateStatusBadge("success");
-      this.showPersonaPicker(user);
+
+      this.pendingUser = user;
+      this.userSession = new UserSession(user, this);
+      await this.userSession.connect();
+
+      // Wait for personas to be enumerated by onReadyState/Child_Enum
+      await new Promise<void>((resolve) => setTimeout(resolve, PERSONA_ENUM_WAIT_MS));
+
+      const personas = this.userSession.ownPersonaList;
+      if (personas.length > 0) {
+        this.appendStatus(`Auto-picking persona "${personas[0].displayName}".`);
+        try {
+          await this.userSession.pickPersona(personas[0].id);
+          this.onSessionStarted();
+        } catch (err) {
+          this.updateStatusBadge("error");
+          this.appendStatus(`Persona error: ${(err as Error).message}`);
+        }
+      } else {
+        this.appendStatus("No personas found. Create a new persona to continue.");
+        this.showRoute("persona-picker-route");
+      }
     } catch (err) {
       this.updateStatusBadge("error");
       this.appendStatus(`Login error: ${(err as Error).message}`);
@@ -291,8 +315,11 @@ export class LoginClient {
       this.appendStatus(`Guest session started.`);
       this.updateStatusBadge("success");
 
-      this.userSession = new UserSession(user);
+      this.userSession = new UserSession(user, this);
       await this.userSession.connect();
+
+      // Wait for personas to be enumerated by onReadyState/Child_Enum
+      await new Promise<void>((resolve) => setTimeout(resolve, PERSONA_ENUM_WAIT_MS));
 
       const personaId = this.userSession.ownPersonaList[0]?.id ?? "0";
       this.appendStatus(`Opening persona ${personaId}…`);
@@ -314,7 +341,7 @@ export class LoginClient {
     if (!this.pendingUser) return;
 
     const user = this.pendingUser;
-    this.userSession = new UserSession(user);
+    this.userSession = new UserSession(user, this);
     await this.userSession.connect();
 
     this.appendStatus(`Opening persona…`);
