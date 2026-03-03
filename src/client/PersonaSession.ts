@@ -4,6 +4,7 @@ import { InWorldSession } from "./InWorldSession.js";
 import type { PersonaTransform } from "../avatar/PersonaPuppet.js";
 import { getPFabric } from "../mv/LnG.js";
 
+
 /**
  * PersonaSession - manages a pRPersona instance and transitions to InWorldSession.
  * Integrates with @metaversalcorp/mvrp for persona protocol handling.
@@ -74,38 +75,7 @@ export class PersonaSession extends Session {
 
     const transform: PersonaTransform = { ...position, rotY: 0 };
     this.inWorldSession.avatar.moveTo(transform);
-    this.inWorldSession.avatar.sendUpdate(celestialId);
-    this.sendUpdate(celestialId, transform);
-  }
-
-  /** Encode current avatar position/rotation and send an UPDATE to the persona service. */
-  private sendUpdate(celestialId: string, transform: PersonaTransform): void {
-    const tmStamp = Date.now();
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const rPersona = this.pRPersona as any;
-    if (!rPersona?.Send) {
-      console.log(`[PersonaSession] sendUpdate ${celestialId}`, { tmStamp, transform });
-      return;
-    }
-
-    const sinHalf = Math.sin(transform.rotY / 2);
-    const cosHalf = Math.cos(transform.rotY / 2);
-    const rotDwV = rPersona.Quat_Encode([0, sinHalf, 0, cosHalf]);
-
-    rPersona.Send('UPDATE', {
-      tmStamp,
-      pState: {
-        pPosition_Head: {
-          pParent: { twObjectIx: celestialId, wClass: 0 },
-          pRelative: {
-            vPosition: { dX: transform.x, dY: transform.y, dZ: transform.z },
-          },
-        },
-        pRotation_Head: { dwV: rotDwV },
-        pRotation_Body: { dwV: rotDwV },
-      },
-    });
+    // PersonaPuppet's sendUpdate() handles transmission in update loop
   }
 
   async disconnect(): Promise<void> {
