@@ -2,7 +2,6 @@ import { Session } from '../base/Session.js';
 import { ConnectionState } from '../types/index.js';
 import { getPFabric, LnGUser, LnGPersona } from '../mv/LnG.js';
 import { PersonaSession } from './PersonaSession.js';
-import type { PersonaTransform } from '../avatar/PersonaPuppet.js';
 
 /**
  * UserSession — manages the authenticated user's RUser model and delegates
@@ -152,7 +151,7 @@ export class UserSession extends Session {
   /**
    * Relay a teleport command to the active PersonaSession.
    */
-  teleportTo(celestialId: string, position: Omit<PersonaTransform, 'rotY'>): void {
+  teleportTo(celestialId: string, position: { x: number; y: number; z: number }): void {
     this._personaSession?.teleportTo(celestialId, position);
   }
 

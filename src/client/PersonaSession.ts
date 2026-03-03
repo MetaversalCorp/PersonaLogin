@@ -1,7 +1,6 @@
 import { Session } from "../base/Session.js";
 import { ConnectionState, PersonaInfo } from "../types/index.js";
 import { InWorldSession } from "./InWorldSession.js";
-import type { PersonaTransform } from "../avatar/PersonaPuppet.js";
 
 /**
  * Wraps a model's Send() call in a Promise using the callback pattern required
@@ -181,15 +180,9 @@ export class PersonaSession extends Session {
     return errors[code] ?? `UNKNOWN_ERROR_${code}`;
   }
 
-  /** Relay a teleport command to the active persona puppet. */
-  teleportTo(
-    celestialId: string,
-    position: Omit<PersonaTransform, "rotY">
-  ): void {
-    if (!this.inWorldSession?.avatar) return;
-
-    const transform: PersonaTransform = { ...position, rotY: 0 };
-    this.inWorldSession.avatar.moveTo(transform, celestialId);
+  /** Relay a teleport command to the active in-world session. */
+  public teleportTo(celestialId: string, position: { x: number; y: number; z: number }): void {
+    this.inWorldSession?.teleportTo(celestialId, position);
   }
 
   async disconnect(): Promise<void> {

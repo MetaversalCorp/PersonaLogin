@@ -10,6 +10,11 @@ export interface PersonaTransform {
   rotY: number;
 }
 
+export interface PositionUniversal {
+  pParent: { twObjectIx: number; wClass: number };
+  pRelative: { dwX: number; dwY: number; dwZ: number };
+}
+
 /**
  * PersonaPuppet - avatar controller that drives the rPersona via Send() calls.
  * Integrates with @metaversalcorp/mvrp RPersona protocol for avatar animation
@@ -52,13 +57,20 @@ export class PersonaPuppet extends Avatar {
 
   /**
    * Move the avatar to a new world position and transmit it to the service.
-   * @param celestialId - The pParent celestial body identifier; defaults to '104'.
+   * @param positionUniversal - POSITION_UNIVERSAL with pParent and pRelative coordinates.
    */
-  moveTo(transform: PersonaTransform, celestialId: string = '104'): void {
+  moveTo(positionUniversal: PositionUniversal): void {
     if (!this._spawned) return;
-    this.transform = { ...transform };
-    console.log(`[PersonaPuppet] moveTo`, this.transform);
-    this.sendUpdate(celestialId);
+    this.transform = {
+      x: positionUniversal.pRelative.dwX,
+      y: positionUniversal.pRelative.dwY,
+      z: positionUniversal.pRelative.dwZ,
+      rotY: 0,
+    };
+    console.log(`[PersonaPuppet] moveTo`, positionUniversal);
+    const rPersona = this.getRPersona();
+    if (!rPersona?.Send) return;
+    rPersona.Send('TELEPORT', { pPosition: positionUniversal });
   }
 
   /**

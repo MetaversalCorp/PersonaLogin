@@ -38,4 +38,32 @@ export class InWorldSession extends Session {
     }
     this.setState(ConnectionState.Disconnected);
   }
+
+  public teleportTo(celestialId: string, position: { x: number; y: number; z: number }): void {
+    if (!this.puppet) {
+      console.error('[InWorldSession] No puppet for teleport');
+      return;
+    }
+
+    const twObjectIx = Number(celestialId);
+    if (isNaN(twObjectIx)) {
+      console.error('[InWorldSession] Invalid celestialId:', celestialId);
+      return;
+    }
+
+    const positionUniversal = {
+      pParent: {
+        twObjectIx,
+        wClass: 0
+      },
+      pRelative: {
+        dwX: position.x,
+        dwY: position.y,
+        dwZ: position.z
+      }
+    };
+
+    console.log('[InWorldSession] Teleporting:', positionUniversal);
+    this.puppet.moveTo(positionUniversal);
+  }
 }
