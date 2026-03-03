@@ -5,41 +5,6 @@ import { PersonaSession } from './PersonaSession.js';
 import type { PersonaTransform } from '../avatar/PersonaPuppet.js';
 
 /**
- * Wraps a model's Send() call in a Promise using the callback pattern required
- * by the MV server action protocol.
- *
- * @param pModel    The model object (e.g. pRUser) with a Send() method.
- * @param sAction   The action name (e.g. 'RPERSONA_OPEN').
- * @param pData     Request fields to merge into pIAction.pRequest.
- * @param callback  Called with the completed pIAction; may be async and should
- *                  call pIAction.GetResult() to check for errors.
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function promisifyAction<T>(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  pModel: any,
-  sAction: string,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  pData: Record<string, any>,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  callback: (pIAction: any) => Promise<T>
-): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const sent = (pModel as any).Send(sAction, pData, null, async (pIAction: any) => {
-      try {
-        resolve(await callback(pIAction));
-      } catch (err) {
-        reject(err);
-      }
-    });
-    if (!sent) {
-      reject(new Error(`[promisifyAction] Failed to send action '${sAction}'`));
-    }
-  });
-}
-
-/**
  * UserSession — manages the authenticated user's RUser model and delegates
  * persona lifecycle to PersonaSession.
  *
@@ -104,54 +69,6 @@ export class UserSession extends Session {
     const persona = this._ownPersonaList.find((p) => p.id === personaId);
     return new Promise<void>((resolve) =>
       this.setupPersonaSession(personaId, resolve, persona?.firstName, persona?.lastName)
-    );
-  }
-
-  /**
-   * Open a persona by ID via the RPERSONA_OPEN server action on the RUser model,
-   * then enter the world with that persona.
-   */
-  async openPersona(personaId: number): Promise<void> {
-    const pLnG = this.pLnG;
-
-    if (!pLnG || !this._pRUser) {
-      throw new Error('UserSession not connected: pRUser model unavailable');
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const twRUserIx = (this._pRUser as any).twRUserIx;
-
-    // Validate parameters
-    if (typeof twRUserIx !== 'number' || twRUserIx <= 0) {
-      throw new Error(`Invalid twRUserIx from pRUser: ${twRUserIx} (type: ${typeof twRUserIx})`);
-    }
-    if (typeof personaId !== 'number' || personaId < 0) {
-      throw new Error(`Invalid personaId: ${personaId} (type: ${typeof personaId})`);
-    }
-
-    console.log(`[openPersona] Sending RPERSONA_OPEN with twRUserIx=${twRUserIx}, personaId=${personaId}`);
-
-    await promisifyAction(
-      this._pRUser,
-      'RPERSONA_OPEN',
-      {
-        twRUserIx: twRUserIx,
-        qwMapIx_Home: 0n,
-        twRPersonaIx: personaId,
-      },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      async (pIAction: any) => {
-        const result = pIAction.GetResult();
-        if (result === 0) {
-          const id = pIAction.pResponse!.twRPersonaIx;
-          console.log(`[openPersona] Success! Created persona ID: ${id}`);
-          return new Promise<void>((resolve) =>
-            this.setupPersonaSession(String(id), resolve)
-          );
-        } else {
-          throw new Error(`Failed to open persona ${personaId} (error ${result})`);
-        }
-      }
     );
   }
 
