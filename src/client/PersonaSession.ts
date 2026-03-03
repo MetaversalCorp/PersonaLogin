@@ -74,8 +74,7 @@ export class PersonaSession extends Session {
     if (!this.inWorldSession?.avatar) return;
 
     const transform: PersonaTransform = { ...position, rotY: 0 };
-    this.inWorldSession.avatar.moveTo(transform);
-    // PersonaPuppet's sendUpdate() handles transmission in update loop
+    this.inWorldSession.avatar.moveTo(transform, celestialId);
   }
 
   async disconnect(): Promise<void> {
