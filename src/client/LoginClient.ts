@@ -311,8 +311,9 @@ export class LoginClient {
       this.userSession = new UserSession(user);
       await this.userSession.connect();
 
-      this.appendStatus(`Opening guest persona…`);
-      await this.userSession.openPersona(0);
+      const guestPersonaId = Number(this.userSession.ownPersonaList[0]?.id ?? 0);
+      this.appendStatus(`Opening persona…`);
+      await this.userSession.openPersona(guestPersonaId);
       this.onSessionStarted();
     } catch (err) {
       this.updateStatusBadge("error");
