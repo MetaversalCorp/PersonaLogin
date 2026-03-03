@@ -26,7 +26,7 @@ function promisifyAction<T>(
 ): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const sent = pModel.Send(sAction, pData, null, async (pIAction: any) => {
+    const sent = (pModel as any).Send(sAction, pData, null, async (pIAction: any) => {
       try {
         resolve(await callback(pIAction));
       } catch (err) {
@@ -99,17 +99,16 @@ export class UserSession extends Session {
 
   /**
    * Enter the world with the selected persona.
-   * Uses the setupPersonaSession() pattern for consistency with createPersona().
    */
   async pickPersona(personaId: string): Promise<void> {
     const persona = this._ownPersonaList.find((p) => p.id === personaId);
     return new Promise<void>((resolve) =>
-      this.setupPersonaSession(personaId, resolve, persona?.firstName ?? '', persona?.lastName)
+      this.setupPersonaSession(personaId, resolve, persona?.firstName, persona?.lastName)
     );
   }
 
   /**
-   * Open a persona via the RPERSONA_OPEN server action on the RUser model,
+   * Open a persona by ID via the RPERSONA_OPEN server action on the RUser model,
    * then enter the world with that persona.
    */
   async openPersona(personaId: number): Promise<void> {
@@ -133,7 +132,7 @@ export class UserSession extends Session {
               this.setupPersonaSession(String(id), resolve)
             );
           } else {
-            throw new Error(`Failed to open persona (error ${result})`);
+            throw new Error(`Failed to open persona ${personaId} (error ${result})`);
           }
         }
       );
@@ -173,7 +172,7 @@ export class UserSession extends Session {
   }
 
   /**
-   * Set up a PersonaSession for the given persona ID after successful creation,
+   * Set up a PersonaSession for the given persona ID,
    * then resolve the enclosing promise once the session is connected.
    */
   private setupPersonaSession(

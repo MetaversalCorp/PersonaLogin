@@ -294,26 +294,18 @@ export class LoginClient {
   /**
    * Guest login — calls pLnG.Login(MV.MVMF.Encode({ contact: GUEST_EMAIL, password: GUEST_EMAIL })).
    * MV LnG requires both contact and password fields to initiate an anonymous session.
-   * Uses firstName/lastName from the guest form to create a persona directly,
-   * instead of prompting the user to enter a name again.
+   * Uses openPersona(0) to open a persona via RPERSONA_OPEN without name parameters.
    */
   private async handleGuestLogin(): Promise<void> {
     const btn = this.el<HTMLButtonElement>("guest-join-button");
     if (btn) btn.disabled = true;
-
-    const firstName = (this.el<HTMLInputElement>("guest-first-name")?.value ?? "").trim();
-    const lastName = (this.el<HTMLInputElement>("guest-last-name")?.value ?? "").trim();
-    if (!firstName) {
-      if (btn) btn.disabled = false;
-      return;
-    }
 
     this.updateStatusBadge("pending");
     this.appendStatus("Connecting to RP1 as guest via MV LnG…");
 
     try {
       const user = await this.pLnG.Login(MV.MVMF.Encode({ contact: GUEST_EMAIL, password: GUEST_EMAIL }));
-      this.appendStatus(`Guest session started as "${[firstName, lastName].filter(Boolean).join(" ")}".`);
+      this.appendStatus(`Guest session started.`);
       this.updateStatusBadge("success");
 
       this.userSession = new UserSession(user);
@@ -337,11 +329,6 @@ export class LoginClient {
 
   private async handleCreatePersona(): Promise<void> {
     if (!this.pendingUser) return;
-    const firstName =
-      (this.el<HTMLInputElement>("new-persona-first-name")?.value ?? "").trim();
-    const lastName =
-      (this.el<HTMLInputElement>("new-persona-last-name")?.value ?? "").trim();
-    if (!firstName) return;
 
     const user = this.pendingUser;
     this.userSession = new UserSession(user);
@@ -349,7 +336,7 @@ export class LoginClient {
 
     this.appendStatus(`Opening persona…`);
     try {
-      await this.userSession.openPersona(Number(this.userSession.ownPersonaList[0]?.id ?? 0));
+      await this.userSession.openPersona(0);
       this.onSessionStarted();
     } catch (err) {
       this.updateStatusBadge("error");

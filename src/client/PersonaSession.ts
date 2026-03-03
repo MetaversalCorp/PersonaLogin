@@ -60,6 +60,7 @@ export class PersonaSession extends Session {
     this._pRPersona = pRPersona;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (this._pRPersona as any).Attach(this);
+    this.enterPersona();
 
     this._personaInfo = new PersonaInfo(
       this.personaId,
@@ -73,6 +74,21 @@ export class PersonaSession extends Session {
     await this.inWorldSession.connect();
 
     this.setState(ConnectionState.InWorld);
+  }
+
+  /**
+   * Enter the world with this persona by sending RPERSONA_ENTER to the persona model.
+   * PersonaPuppet then handles ongoing position updates.
+   */
+  enterPersona(): void {
+    if (!this._pRPersona) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sent = (this._pRPersona as any).Send('RPERSONA_ENTER', {
+      twRPersonaIx: this.personaId,
+    });
+    if (!sent) {
+      console.warn(`[PersonaSession] RPERSONA_ENTER failed to send for persona ${this.personaId}`);
+    }
   }
 
   /** Relay a teleport command to the active persona puppet. */
