@@ -1,48 +1,8 @@
-// MV is a global namespace populated by side-effect imports in LnG.ts.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-declare const MV: any;
-
 import { Session } from '../base/Session.js';
 import { ConnectionState } from '../types/index.js';
 import { getPFabric, LnGUser, LnGPersona } from '../mv/LnG.js';
 import { PersonaSession } from './PersonaSession.js';
 import type { PersonaTransform } from '../avatar/PersonaPuppet.js';
-
-/** Simple geographic coordinate used for persona spawn placement. */
-interface SimpleGeoPos {
-  lat: number;    // degrees
-  lon: number;    // degrees
-  radius: number; // metres (planet radius + altitude)
-}
-
-/**
- * Convert a simple lat/lon/radius geo position to a Double3 cartesian vector
- * in the Y-up coordinate system used by the MV position protocol.
- */
-function geoPosSimpleToDouble3(geoPos: SimpleGeoPos): Float64Array {
-  const lat = geoPos.lat * Math.PI / 180;
-  const lon = geoPos.lon * Math.PI / 180;
-  const r = geoPos.radius;
-  const cosLat = Math.cos(lat);
-  return new Float64Array([
-    r * cosLat * Math.sin(lon),
-    r * Math.sin(lat),
-    r * cosLat * Math.cos(lon),
-  ]);
-}
-
-/**
- * Apply a small random scatter to a starting geo position to spread out
- * persona spawn points and avoid stacking all new personas at the same spot.
- */
-function applyScatterToStartGeoPos(geoPos: SimpleGeoPos): SimpleGeoPos {
-  const scatter = 0.001; // ~111 m scatter radius at the equator
-  return {
-    lat: geoPos.lat + (Math.random() - 0.5) * scatter,
-    lon: geoPos.lon + (Math.random() - 0.5) * scatter,
-    radius: geoPos.radius,
-  };
-}
 
 /**
  * Wraps a model's Send() call in a Promise using the callback pattern required
@@ -93,22 +53,6 @@ export class UserSession extends Session {
   private _ownPersonaList: LnGPersona[] = [];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private _friendsService: any = null;
-
-  /** Celestial object ID used as the parent reference when placing a new persona.
-   *  Defaults to 104, which is the production Earth celestial ID (matches the HTML location presets). */
-  startingLocationCelestialID: number = 104;
-
-  /** Starting geographic position used as the base for new-persona spawn scatter. */
-  private _startGeoPos: SimpleGeoPos = { lat: 0, lon: 0, radius: 6_371_000 };
-
-  /** Public accessor for the starting geographic position. */
-  get startingLocationGeoPos(): SimpleGeoPos {
-    return this._startGeoPos;
-  }
-
-  set startingLocationGeoPos(value: SimpleGeoPos) {
-    this._startGeoPos = value;
-  }
 
   constructor(user: LnGUser) {
     super();
@@ -165,65 +109,36 @@ export class UserSession extends Session {
   }
 
   /**
-   * Create a new persona via the RPERSONA_OPEN server action on the RUser model,
+   * Open a persona via the RPERSONA_OPEN server action on the RUser model,
    * then enter the world with that persona.
    */
-  async createPersona(firstName: string, lastName?: string): Promise<void> {
-    if (!firstName.trim()) {
-      throw new Error("Forename is required");
-    }
-
+  async openPersona(personaId: number): Promise<void> {
     const pLnG = this.pLnG;
 
     if (pLnG && this._pRUser) {
-      const celestialID = this.startingLocationCelestialID;
-      if (typeof celestialID !== 'number' || !Number.isInteger(celestialID) || celestialID <= 0) {
-        throw new Error(`[createPersona] Invalid startingLocationCelestialID: ${celestialID} (expected a positive integer, e.g. 104 for Earth)`);
-      }
-
-      const geoPosScattered = applyScatterToStartGeoPos(this._startGeoPos);
-      const requestData = {
-        twRUserIx: this.user.twUserIx,
-        // qwMapIx_Home: 0n — BigInt zero; server assigns a default home map.
-        qwMapIx_Home: 0n,
-        pName: {
-          wsForename: firstName,
-          wsSurname: lastName ?? '',
-          // dwSequence: 0 — server assigns the disambiguation sequence number.
-          dwSequence: 0,
-        },
-        pPosition: {
-          pParent: {
-            twObjectIx: celestialID,
-            wClass: MV.MVMF.Core.Namespace_Get('metaversal/rp1').SourceClass_Get('MVSB', 'RMCObject').pSource_Factory.pReference.wClass,
-          },
-          pRelative: {
-            vPosition: geoPosSimpleToDouble3(geoPosScattered),
-          },
-        },
-      };
-      console.debug('[createPersona] RPERSONA_OPEN request:', JSON.stringify(requestData, (_, v) => typeof v === 'bigint' ? v.toString() : v));
       await promisifyAction(
         this._pRUser,
         'RPERSONA_OPEN',
-        requestData,
+        {
+          twRUserIx: this.user.twUserIx,
+          qwMapIx_Home: 0n,
+          twRPersonaIx: personaId,
+        },
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         async (pIAction: any) => {
           const result = pIAction.GetResult();
-          console.debug('[createPersona] RPERSONA_OPEN result:', result);
           if (result === 0) {
             const id = pIAction.pResponse!.twRPersonaIx;
             return new Promise<void>((resolve) =>
-              this.setupPersonaSession(String(id), resolve, firstName, lastName)
+              this.setupPersonaSession(String(id), resolve)
             );
           } else {
-            throw new Error(`Persona creation failed (error ${result})`);
+            throw new Error(`Failed to open persona (error ${result})`);
           }
         }
       );
     } else {
-      const personaId = `${firstName}${lastName ? `_${lastName}` : ''}_${Date.now()}`;
-      this._personaSession = new PersonaSession(personaId, pLnG, firstName, lastName);
+      this._personaSession = new PersonaSession(String(personaId), pLnG);
       await this._personaSession.connect();
       this._initFriendsService();
     }
@@ -264,7 +179,7 @@ export class UserSession extends Session {
   private setupPersonaSession(
     id: string,
     resolve: (value: void | PromiseLike<void>) => void,
-    firstName: string,
+    firstName?: string,
     lastName?: string
   ): void {
     this._personaSession = new PersonaSession(id, this.pLnG, firstName, lastName);

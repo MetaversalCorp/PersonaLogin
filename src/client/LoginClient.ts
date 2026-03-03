@@ -319,8 +319,9 @@ export class LoginClient {
       this.userSession = new UserSession(user);
       await this.userSession.connect();
 
-      this.appendStatus(`Creating guest persona "${[firstName, lastName].filter(Boolean).join(" ")}".`);
-      await this.userSession.createPersona(firstName, lastName);
+      const guestPersonaId = Number(this.userSession.ownPersonaList[0]?.id ?? 0);
+      this.appendStatus(`Opening persona…`);
+      await this.userSession.openPersona(guestPersonaId);
       this.onSessionStarted();
     } catch (err) {
       this.updateStatusBadge("error");
@@ -346,13 +347,13 @@ export class LoginClient {
     this.userSession = new UserSession(user);
     await this.userSession.connect();
 
-    this.appendStatus(`Creating persona "${[firstName, lastName].filter(Boolean).join(" ")}".`);
+    this.appendStatus(`Opening persona…`);
     try {
-      await this.userSession.createPersona(firstName, lastName);
+      await this.userSession.openPersona(Number(this.userSession.ownPersonaList[0]?.id ?? 0));
       this.onSessionStarted();
     } catch (err) {
       this.updateStatusBadge("error");
-      this.appendStatus(`Create persona error: ${(err as Error).message}`);
+      this.appendStatus(`Open persona error: ${(err as Error).message}`);
     }
   }
 
