@@ -16,6 +16,8 @@ export interface LnGPersona {
 /** User data returned after a successful MV LnG login. */
 export interface LnGUser {
   id: string;
+  /** 64-bit user index as a BigInt, matching pLnG.pSession.twUserIx. */
+  twUserIx: bigint;
   displayName: string;
   personas: LnGPersona[];
 }
@@ -130,8 +132,11 @@ export function createLnGClient(): ILnGClient {
                 //   const pRUser = pLnG.Model_Open('RUser', twUserIx);
                 //   const personas = [...pRUser.ownPersonaList];
                 //   pLnG.Model_Close(pRUser);
+                const rawUserIx = pLnG.pSession?.twUserIx;
+                const twUserIx: bigint = typeof rawUserIx === 'bigint' ? rawUserIx : BigInt(rawUserIx ?? 0);
                 const user: LnGUser = {
-                  id: String(pLnG.pSession?.twUserIx ?? 0),
+                  id: String(twUserIx),
+                  twUserIx,
                   displayName: "",
                   personas: [],
                 };
