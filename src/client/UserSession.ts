@@ -159,6 +159,10 @@ export class UserSession extends Session {
    * then enter the world with that persona.
    */
   async createPersona(firstName: string, lastName?: string): Promise<void> {
+    if (!firstName.trim()) {
+      throw new Error("Forename is required");
+    }
+
     const pLnG = this.pLnG;
 
     if (pLnG && this._pRUser) {
@@ -167,6 +171,7 @@ export class UserSession extends Session {
         this._pRUser,
         'RPERSONA_OPEN',
         {
+          twRUserIx: BigInt(this.user.id),
           // qwMapIx_Home: 0 — plain number; server assigns a default home map.
           qwMapIx_Home: 0,
           pName: {
