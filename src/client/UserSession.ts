@@ -14,7 +14,7 @@ import type { PersonaTransform } from '../avatar/PersonaPuppet.js';
 export class UserSession extends Session {
   private readonly user: LnGUser;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private readonly _loginClient: any;
+  private readonly pLnG: any;
   private _personaSession: PersonaSession | null = null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private readonly pRUser: any;
@@ -23,13 +23,13 @@ export class UserSession extends Session {
   private _friendsService: any = null;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  constructor(user: LnGUser, loginClient: any) {
+  constructor(user: LnGUser, pLnG: any) {
     super();
     this.user = user;
-    this._loginClient = loginClient;
+    this.pLnG = pLnG;
 
     // Model_Open + Attach happen IMMEDIATELY in constructor (RP1Demo pattern)
-    this.pRUser = loginClient.pLnG.Model_Open('RUser', user.id);
+    this.pRUser = pLnG.Model_Open('RUser', user.id);
     this.pRUser.Attach(this);
   }
 
@@ -43,11 +43,6 @@ export class UserSession extends Session {
 
   get ownPersonaList(): LnGPersona[] {
     return this._ownPersonaList;
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  get pLnG(): any {
-    return this._loginClient.pLnG;
   }
 
   /**
@@ -156,10 +151,8 @@ export class UserSession extends Session {
     firstName?: string,
     lastName?: string
   ): void {
-    // Prefer pLnG exposed by the RUser model; fall back to the fabric singleton.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const pLnG = (this.pRUser as any)?.pLnG ?? getPFabric()?.pLnG;
-    this._personaSession = new PersonaSession(id, pLnG, this.pRUser, firstName, lastName);
+    // Use pLnG from this instance
+    this._personaSession = new PersonaSession(id, this.pLnG, this.pRUser, firstName, lastName);
     void this._personaSession.connect().then(() => {
       this._initFriendsService();
       resolve();
