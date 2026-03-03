@@ -21,7 +21,7 @@ export class PersonaSession extends Session {
   // Type is kept as `unknown` because the private package cannot be resolved
   // in open-source builds; cast to the real type when the package is available.
   // import('@metaversalcorp/mvrp').RPersona
-  private pRPersona: unknown = null;
+  private _pRPersona: unknown = null;
 
   // pLnG instance retrieved from pFabric at connect time; used to open/close
   // the RPersona model and must outlive the PersonaSession.
@@ -37,6 +37,10 @@ export class PersonaSession extends Session {
     return this._personaInfo;
   }
 
+  get pRPersona(): unknown {
+    return this._pRPersona;
+  }
+
   async connect(): Promise<void> {
     this.setState(ConnectionState.Connecting);
 
@@ -45,11 +49,11 @@ export class PersonaSession extends Session {
     // Falls back to a stub when MV vendor scripts are absent (open-source builds).
     this.pLnG = getPFabric()?.pLnG ?? null;
     if (this.pLnG) {
-      this.pRPersona = this.pLnG.Model_Open('RPersona', this.personaId) ?? { personaId: this.personaId };
+      this._pRPersona = this.pLnG.Model_Open('RPersona', this.personaId) ?? { personaId: this.personaId };
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (this.pRPersona as any)?.Attach?.(this);
+      (this._pRPersona as any)?.Attach?.(this);
     } else {
-      this.pRPersona = { personaId: this.personaId };
+      this._pRPersona = { personaId: this.personaId };
     }
 
     this._personaInfo = new PersonaInfo(
@@ -60,7 +64,7 @@ export class PersonaSession extends Session {
       "default_region"
     );
 
-    this.inWorldSession = new InWorldSession(this._personaInfo);
+    this.inWorldSession = new InWorldSession(this._personaInfo, this);
     await this.inWorldSession.connect();
 
     this.setState(ConnectionState.InWorld);
@@ -84,10 +88,10 @@ export class PersonaSession extends Session {
     }
 
     // Close the RPersona model via pLnG when available (requires @metaversalcorp/mvrp at runtime).
-    if (this.pLnG && this.pRPersona) {
-      this.pLnG.Model_Close(this.pRPersona);
+    if (this.pLnG && this._pRPersona) {
+      this.pLnG.Model_Close(this._pRPersona);
     }
-    this.pRPersona = null;
+    this._pRPersona = null;
     this.pLnG = null;
     this._personaInfo = null;
 
