@@ -22,14 +22,28 @@ export class UserSession extends Session {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private _friendsService: any = null;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  constructor(user: LnGUser, pLnG: any) {
+  /**
+   * Constructor now gets pLnG from MSF fabric via getPFabric().
+   * This follows RP1Demo pattern: Model_Open + Attach in constructor.
+   */
+  constructor(user: LnGUser) {
     super();
     this.user = user;
+
+    // Get the real pLnG from MSF fabric (has Model_Open method)
+    const pLnG = getPFabric()?.pLnG;
+    if (!pLnG) {
+      throw new Error('[UserSession] pLnG not available from MSF fabric');
+    }
     this.pLnG = pLnG;
 
     // Model_Open + Attach happen IMMEDIATELY in constructor (RP1Demo pattern)
+    console.log(`[UserSession] Opening RUser model for user ${user.id}...`);
     this.pRUser = pLnG.Model_Open('RUser', user.id);
+    if (!this.pRUser) {
+      throw new Error(`[UserSession] Model_Open('RUser', '${user.id}') returned null`);
+    }
+    console.log(`[UserSession] RUser model opened, attaching listener`);
     this.pRUser.Attach(this);
   }
 
@@ -51,6 +65,7 @@ export class UserSession extends Session {
    */
   async connect(): Promise<void> {
     this.setState(ConnectionState.Connecting);
+    console.log('[UserSession] Connected (pRUser already initialized in constructor)');
     this.setState(ConnectionState.Connected);
   }
 
