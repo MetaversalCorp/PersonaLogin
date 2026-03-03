@@ -5,6 +5,43 @@ import { getPFabric } from "../mv/LnG.js";
 import { PersonaSession } from "./PersonaSession.js";
 import type { PersonaTransform } from "../avatar/PersonaPuppet.js";
 
+/** Celestial body ID for RP1 Earth used in persona position and teleport. */
+const CELESTIAL_ID_EARTH = 104;
+
+/**
+ * Starting geographic position for new personas (latitude radians, longitude radians, radius metres).
+ * Matches the RP1Demo START_LOCATION_GEOPOS_NORMAL constant.
+ */
+const START_LOCATION_GEOPOS_NORMAL: [number, number, number] = [0.999998177182, 1.005000424655, 6371000];
+
+/**
+ * Convert a geographic position [latRad, lonRad, radius] to a Cartesian double3
+ * { dX, dY, dZ } suitable for MVRP POSITION_UNIVERSAL.pRelative.vPosition.
+ */
+function geoPosSimpleToDouble3([lat, lon, radius]: [number, number, number]): { dX: number; dY: number; dZ: number } {
+  const cosLat = Math.cos(lat);
+  return {
+    dX: radius * cosLat * Math.sin(lon),
+    dY: radius * Math.sin(lat),
+    dZ: radius * cosLat * Math.cos(lon),
+  };
+}
+
+/**
+ * Lazily resolved wClass for the MVSB/RMCObject source class in the metaversal/rp1 namespace.
+ * Cached after first resolution to avoid repeated namespace lookups on every persona creation.
+ */
+let _cachedRMCObjectWClass: number | null = null;
+
+function getRMCObjectWClass(): number {
+  if (_cachedRMCObjectWClass === null) {
+    _cachedRMCObjectWClass = MV.MVMF.Core.Namespace_Get('metaversal/rp1')
+      .SourceClass_Get('MVSB', 'RMCObject')
+      .pSource_Factory.pReference.wClass;
+  }
+  return _cachedRMCObjectWClass as number;
+}
+
 /**
  * Wraps the MV model action callback pattern (`model.Send(action, data, pThis, fn, param)`)
  * in a Promise. Resolves with `pIAction` on success (dwResult === 0); rejects otherwise.
@@ -89,11 +126,11 @@ export class UserSession extends Session {
    * it proceeds asynchronously after world entry and logs a warning if the
    * friends LnG is not available.
    */
-  async pickPersona(id: string): Promise<void> {
+  async pickPersona(id: string, firstName?: string, lastName?: string): Promise<void> {
     this.setState(ConnectionState.EnteringWorld);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const pLnG: any = getPFabric()?.pLnG ?? null;
-    this.personaSession = new PersonaSession(id, pLnG);
+    this.personaSession = new PersonaSession(id, pLnG, firstName, lastName);
     await this.personaSession.connect();
 
     this.setState(ConnectionState.InWorld);
@@ -144,18 +181,22 @@ export class UserSession extends Session {
     if (!this.pLnG || !this.pRUser) {
       throw new Error("[UserSession] pRUser is not available; cannot create persona");
     }
+    const wClass = getRMCObjectWClass();
     const result = await promisifyAction(
       this.pRUser,
       'RPERSONA_OPEN',
       {
-        pName: { wsForename: firstName, wsSurname: lastName, dwSequence: 0 },
-        // qwMapIx_Home: 0 — no home map preference; server assigns default
+        twRUserIx: parseInt(this.userId, 10),
         qwMapIx_Home: 0,
-        // twSecureDoorIx: 0 — no access restriction for persona creation
-        twSecureDoorIx: 0,
+        pName: { wsForename: firstName, wsSurname: lastName, dwSequence: 0 },
         pPosition: {
-          pParent: { wClass: 0, twObjectIx: 0 },
-          pRelative: { vPosition: { dX: 0, dY: 0, dZ: 0 } },
+          pParent: {
+            twObjectIx: CELESTIAL_ID_EARTH,
+            wClass: wClass,
+          },
+          pRelative: {
+            vPosition: geoPosSimpleToDouble3(START_LOCATION_GEOPOS_NORMAL),
+          },
         },
       }
     );
@@ -171,14 +212,14 @@ export class UserSession extends Session {
       displayName,
     };
     this.ownPersonaList.push(persona);
-    await this.pickPersona(persona.id);
+    await this.pickPersona(persona.id, firstName, lastName);
     return persona;
   }
 
   /**
    * Teleport the active persona to the given world position.
    *
-   * @param celestialId - The pParent celestial body identifier (e.g. "earth_001").
+   * @param celestialId - The pParent celestial body identifier (e.g. 104 for RP1 Earth).
    * @param transform - Cartesian position in world-space metres (x/y/z).
    *   `rotY` is intentionally omitted and defaults to 0 on the puppet side.
    *
