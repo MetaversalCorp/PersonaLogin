@@ -5,6 +5,25 @@ import { getPFabric } from "../mv/LnG.js";
 import { PersonaSession } from "./PersonaSession.js";
 import type { PersonaTransform } from "../avatar/PersonaPuppet.js";
 
+/**
+ * Wraps the MV model action callback pattern (`model.Send(action, data, pThis, fn, param)`)
+ * in a Promise. Resolves with `pIAction` on success (dwResult === 0); rejects otherwise.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function promisifyAction(model: any, action: string, requestData: Record<string, unknown>): Promise<any> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return new Promise<any>((resolve, reject) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    model.Send(action, requestData, null, (pIAction: any) => {
+      if (pIAction.dwResult !== 0) {
+        reject(new Error(`[UserSession] Action ${action} failed: result ${pIAction.dwResult}`));
+      } else {
+        resolve(pIAction);
+      }
+    }, null);
+  });
+}
+
 // MV is a global namespace populated by side-effect imports in LnG.ts.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 declare const MV: any;
@@ -25,6 +44,17 @@ export class UserSession extends Session {
 
   private personaSession: PersonaSession | null = null;
 
+  // pLnG instance stored during connect(); used for pRUser lifecycle management.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private pLnG: any = null;
+
+  // pRUser model opened during connect() and closed during disconnect().
+  // Used by createPersona() to send the RPERSONA_OPEN action.
+  // Type is kept as `unknown` because the private package cannot be resolved
+  // in open-source builds; cast to the real type when the package is available.
+  // import('@metaversalcorp/mvrp').RUser
+  private pRUser: unknown = null;
+
   // MV.MVRP.Fabric.FRIENDS instance initialized after persona entry.
   // Type is kept as `unknown` because the private package cannot be resolved
   // in open-source builds; cast to the real type when the package is available.
@@ -41,8 +71,14 @@ export class UserSession extends Session {
 
   async connect(): Promise<void> {
     this.setState(ConnectionState.Connecting);
-    // Real implementation (requires @metaversalcorp/mvmf at runtime):
-    // await pLnG instance readiness check here.
+    this.pLnG = getPFabric()?.pLnG ?? null;
+    if (this.pLnG) {
+      try {
+        this.pRUser = this.pLnG.Model_Open('RUser', parseInt(this.userId, 10));
+      } catch (err) {
+        console.error("[UserSession] Failed to open RUser model:", err);
+      }
+    }
     this.setState(ConnectionState.Connected);
   }
 
@@ -99,18 +135,37 @@ export class UserSession extends Session {
   }
 
   /**
-   * Create a new persona and enter the world with it.
-   *
-   * Real implementation (requires @metaversalcorp/mvmf at runtime):
-   *   const persona = await pLnG.CreatePersona(firstName, lastName);
-   *   this.ownPersonaList.push(persona);
-   *   await this.pickPersona(persona.id);
+   * Create a new persona on the server via the RPERSONA_OPEN action and enter
+   * the world with it. Uses the real numeric persona ID (twRPersonaIx) returned
+   * by the server instead of a stub ID.
    */
   async createPersona(firstName: string, lastName: string): Promise<LnGPersona> {
     const displayName = [firstName, lastName].filter(Boolean).join(" ");
-    // Stub: real persona creation uses @metaversalcorp/mvmf CreatePersona()
+    if (!this.pLnG || !this.pRUser) {
+      throw new Error("[UserSession] pRUser is not available; cannot create persona");
+    }
+    const result = await promisifyAction(
+      this.pRUser,
+      'RPERSONA_OPEN',
+      {
+        pName: { wsForename: firstName, wsSurname: lastName, dwSequence: 0 },
+        // qwMapIx_Home: 0 — no home map preference; server assigns default
+        qwMapIx_Home: 0,
+        // twSecureDoorIx: 0 — no access restriction for persona creation
+        twSecureDoorIx: 0,
+        pPosition: {
+          pParent: { wClass: 0, twObjectIx: 0 },
+          pRelative: { vPosition: { dX: 0, dY: 0, dZ: 0 } },
+        },
+      }
+    );
+    const rawId = result.pResponse?.twRPersonaIx;
+    if (rawId == null) {
+      throw new Error("[UserSession] RPERSONA_OPEN response missing twRPersonaIx");
+    }
+    const personaId = String(rawId);
     const persona: LnGPersona = {
-      id: `persona_stub_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+      id: personaId,
       firstName,
       lastName,
       displayName,
@@ -145,6 +200,11 @@ export class UserSession extends Session {
     }
     this.friendsReadyListener = null;
     this.friendsManager = null;
+    if (this.pRUser && this.pLnG) {
+      this.pLnG.Model_Close(this.pRUser);
+    }
+    this.pRUser = null;
+    this.pLnG = null;
     this.setState(ConnectionState.Disconnected);
   }
 }
