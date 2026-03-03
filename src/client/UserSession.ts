@@ -145,18 +145,13 @@ export class UserSession extends Session {
 
   /**
    * Enter the world with the selected persona.
-   * Creates a PersonaSession and initializes the friends service.
+   * Uses the setupPersonaSession() pattern for consistency with createPersona().
    */
   async pickPersona(personaId: string): Promise<void> {
     const persona = this._ownPersonaList.find((p) => p.id === personaId);
-    this._personaSession = new PersonaSession(
-      personaId,
-      this.pLnG,
-      persona?.firstName,
-      persona?.lastName
+    return new Promise<void>((resolve) =>
+      this.setupPersonaSession(personaId, resolve, persona?.firstName ?? '', persona?.lastName)
     );
-    await this._personaSession.connect();
-    this._initFriendsService();
   }
 
   /**
