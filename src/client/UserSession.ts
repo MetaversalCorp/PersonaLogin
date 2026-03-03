@@ -1,13 +1,35 @@
-// Updated UserSession.ts to allow empty lastName and fix geoPosSimpleToDouble3 conversion
+import Session from "base";
 
-function geoPosSimpleToDouble3(geoPos) {
-    // ... implementation ...
-}
-
-export class UserSession {
-    constructor(lastName) {
-        this.lastName = lastName;
-        this.wsSurname = lastName ? lastName : ''; // Set wsSurname to empty string if lastName is empty
+class UserSession extends Session {
+    constructor(user) {
+        super();
+        this.user = user;
+        this.personas = [];
     }
-    // other methods
+
+    connect() {
+        // Logic to connect the user session
+        console.log(`User ${this.user.name} connected.`);
+    }
+
+    createPersona(personaData) {
+        const newPersona = { ...personaData };
+        this.personas.push(newPersona);
+        console.log(`Persona created: ${newPersona.name}`);
+    }
+
+    pickPersona(personaName) {
+        const persona = this.personas.find(p => p.name === personaName);
+        if (persona) {
+            console.log(`Persona picked: ${personaName}`);
+            return persona;
+        } else {
+            console.error(`Persona ${personaName} not found.`);
+            return null;
+        }
+    }
+
+    disconnect() {
+        console.log(`User ${this.user.name} disconnected.`);
+    }
 }
