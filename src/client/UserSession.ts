@@ -14,14 +14,20 @@ import type { PersonaTransform } from '../avatar/PersonaPuppet.js';
 export class UserSession extends Session {
   private readonly user: LnGUser;
   private _personaSession: PersonaSession | null = null;
-  private _pRUser: unknown = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private readonly pRUser: any;
   private _ownPersonaList: LnGPersona[] = [];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private _friendsService: any = null;
 
-  constructor(user: LnGUser) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  constructor(user: LnGUser, loginClient: any) {
     super();
     this.user = user;
+
+    // Model_Open + Attach happen IMMEDIATELY in constructor (RP1Demo pattern)
+    this.pRUser = loginClient.pLnG.Model_Open('RUser', user.id);
+    this.pRUser.Attach(this);
   }
 
   get userId(): string {
@@ -36,33 +42,12 @@ export class UserSession extends Session {
     return this._ownPersonaList;
   }
 
-  get pRUser(): unknown {
-    return this._pRUser;
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private get pLnG(): any {
-    return getPFabric()?.pLnG ?? null;
-  }
-
   /**
-   * Initialize the UserSession by opening the RUser model via pLnG.
-   * Listen for onReadyState and enumerate existing personas via Child_Enum.
+   * Initialize the UserSession connection state.
+   * Model_Open + Attach already happened in constructor.
    */
   async connect(): Promise<void> {
     this.setState(ConnectionState.Connecting);
-
-    const pLnG = this.pLnG;
-    if (pLnG) {
-      const pRUser = pLnG.Model_Open('RUser', this.user.id);
-      if (pRUser) {
-        this._pRUser = pRUser;
-        console.log('[UserSession] RUser model opened, attaching listener for ready state');
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (pRUser as any).Attach(this);
-      }
-    }
-
     this.setState(ConnectionState.Connected);
   }
 
@@ -72,19 +57,13 @@ export class UserSession extends Session {
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onReadyState(pNotice: any): void {
-    if (!this._pRUser) return;
+    if (pNotice.pCreator !== this.pRUser) return;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const pRUser = this._pRUser as any;
-
-    // Verify notification is for our pRUser instance
-    if (pNotice.pCreator !== pRUser) return;
-
-    const readyState = pRUser.ReadyState?.();
+    const readyState = this.pRUser.ReadyState?.();
 
     console.log('[UserSession] onReadyState fired, readyState:', readyState);
 
-    if (pRUser.eSTATE?.RECOVERED !== undefined && readyState === pRUser.eSTATE.RECOVERED) {
+    if (this.pRUser.eSTATE?.RECOVERED !== undefined && readyState === this.pRUser.eSTATE.RECOVERED) {
       console.log('[UserSession] RUser state is RECOVERED, enumerating personas...');
       this.enumeratePersonas();
     }
@@ -94,11 +73,6 @@ export class UserSession extends Session {
    * Enumerate existing personas using Child_Enum like RP1Demo does.
    */
   private enumeratePersonas(): void {
-    if (!this._pRUser) return;
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const pRUser = this._pRUser as any;
-
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const enumCallback = (rPersona: any): boolean => {
       const personaId = rPersona.twRPersonaIx;
@@ -121,19 +95,8 @@ export class UserSession extends Session {
     };
 
     try {
-      pRUser.Child_Enum('RPersona', this, enumCallback);
+      this.pRUser.Child_Enum('RPersona', this, enumCallback);
       console.log(`[UserSession] Persona enumeration complete. Found ${this._ownPersonaList.length} personas`);
-
-      // Auto-pick the first persona (no persona picker needed)
-      if (this._ownPersonaList.length > 0) {
-        const firstPersona = this._ownPersonaList[0];
-        console.log(`[UserSession] Auto-picking first persona: ${firstPersona.displayName} (ID: ${firstPersona.id})`);
-        void this.pickPersona(firstPersona.id).catch((err) => {
-          console.error('[UserSession] Auto-pick persona failed:', err);
-        });
-      } else {
-        console.warn('[UserSession] No personas found - user needs to create one');
-      }
     } catch (err) {
       console.error('[UserSession] Child_Enum failed:', err);
     }
@@ -160,14 +123,9 @@ export class UserSession extends Session {
       this._personaSession = null;
     }
 
-    const pLnG = this.pLnG;
-    if (pLnG && this._pRUser) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const pRUser = this._pRUser as any;
-      pRUser.Detach(this);
-      pLnG.Model_Close(this._pRUser);
+    if (this.pRUser) {
+      this.pRUser.Detach(this);
     }
-    this._pRUser = null;
     this._ownPersonaList = [];
 
     this.setState(ConnectionState.Disconnected);
@@ -190,7 +148,10 @@ export class UserSession extends Session {
     firstName?: string,
     lastName?: string
   ): void {
-    this._personaSession = new PersonaSession(id, this.pLnG, this._pRUser, firstName, lastName);
+    // Prefer pLnG exposed by the RUser model; fall back to the fabric singleton.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const pLnG = (this.pRUser as any)?.pLnG ?? getPFabric()?.pLnG;
+    this._personaSession = new PersonaSession(id, pLnG, this.pRUser, firstName, lastName);
     void this._personaSession.connect().then(() => {
       this._initFriendsService();
       resolve();
