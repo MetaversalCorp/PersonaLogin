@@ -2,6 +2,7 @@ import { Session } from "../base/Session.js";
 import { ConnectionState, PersonaInfo } from "../types/index.js";
 import { InWorldSession } from "./InWorldSession.js";
 import type { PersonaTransform } from "../avatar/PersonaPuppet.js";
+import type { UserSession } from "./UserSession.js";
 
 /**
  * Wraps a model's Send() call in a Promise using the callback pattern required
@@ -58,12 +59,16 @@ export class PersonaSession extends Session {
   private _firstName: string | undefined;
   private _lastName: string | undefined;
 
-  constructor(personaId: string, pLnG: any, firstName?: string, lastName?: string) {
+  private userSession: UserSession | null;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  constructor(personaId: string, pLnG: any, firstName?: string, lastName?: string, userSession?: UserSession) {
     super();
     this.personaId = personaId;
     this.pLnG = pLnG;
     this._firstName = firstName;
     this._lastName = lastName;
+    this.userSession = userSession ?? null;
   }
 
   get personaInfo(): PersonaInfo | null {
@@ -77,19 +82,40 @@ export class PersonaSession extends Session {
   async connect(): Promise<void> {
     this.setState(ConnectionState.Connecting);
 
-    // Use the pLnG instance passed from UserSession to open the RPersona model.
     if (!this.pLnG) {
       throw new Error(`[PersonaSession] pLnG is not available; cannot open RPersona model`);
     }
-    const pRPersona = this.pLnG.Model_Open('RPersona', this.personaId);
+
+    const numericId = Number(this.personaId);
+    if (isNaN(numericId)) {
+      throw new Error(`[PersonaSession] personaId '${this.personaId}' is not a valid number`);
+    }
+
+    // Step 1: Assume the persona on the server (must happen before Model_Open).
+    console.log(`[PersonaSession] Assuming persona ${this.personaId}...`);
+    try {
+      await this.send_RPERSONA_ASSUME(numericId);
+    } catch (err) {
+      console.error(`[PersonaSession] RPERSONA_ASSUME failed:`, err);
+      throw new Error(`Failed to assume persona ${this.personaId}: ${(err as Error).message}`);
+    }
+
+    // Step 2: Now open the RPersona model (works after assume).
+    console.log(`[PersonaSession] Opening RPersona model for ${this.personaId}...`);
+    const pRPersona = this.pLnG.Model_Open('RPersona', `${this.personaId}`);
     if (!pRPersona) {
-      throw new Error(`[PersonaSession] Model_Open('RPersona', '${this.personaId}') returned null`);
+      throw new Error(`[PersonaSession] Model_Open('RPersona', '${this.personaId}') returned null after RPERSONA_ASSUME`);
     }
     this._pRPersona = pRPersona;
+    console.log(`[PersonaSession] RPersona model opened successfully`);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (this._pRPersona as any).Attach(this);
+
+    // Step 3: Enter the world with RPERSONA_ENTER.
+    console.log(`[PersonaSession] Entering world...`);
     await this.enterPersona();
 
+    // Step 4: Set up persona info and in-world session.
     this._personaInfo = new PersonaInfo(
       this.personaId,
       [this._firstName, this._lastName].filter(Boolean).join(" ") || `Persona_${this.personaId}`,
@@ -101,7 +127,35 @@ export class PersonaSession extends Session {
     this.inWorldSession = new InWorldSession(this._personaInfo, this);
     await this.inWorldSession.connect();
 
+    console.log(`[PersonaSession] Connected! In world as persona ${this.personaId}`);
     this.setState(ConnectionState.InWorld);
+  }
+
+  /**
+   * Send RPERSONA_ASSUME to assume the persona on the server.
+   * This must be done before Model_Open will work.
+   */
+  private send_RPERSONA_ASSUME(personaId: number): Promise<void> {
+    if (!this.userSession?.pRUser) {
+      throw new Error('[PersonaSession] UserSession pRUser not available');
+    }
+
+    return promisifyAction(
+      this.userSession.pRUser,
+      'RPERSONA_ASSUME',
+      {
+        twRPersonaIx: personaId,
+        twSessionIz: 0,
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      async (pIAction: any) => {
+        const result = pIAction.GetResult();
+        console.log(`[send_RPERSONA_ASSUME] Result: ${result}`);
+        if (result !== 0) {
+          throw new Error(`RPERSONA_ASSUME failed with error code ${result}`);
+        }
+      }
+    );
   }
 
   /**
@@ -109,9 +163,9 @@ export class PersonaSession extends Session {
    * Sends position data matching RP1Demo's guest flow.
    * PersonaPuppet then handles ongoing position updates.
    */
-  private enterPersona(): Promise<void> {
+  private async enterPersona(): Promise<void> {
     if (!this._pRPersona) {
-      throw new Error('RPersona not open');
+      throw new Error('[PersonaSession] RPersona model not open');
     }
 
     const pPosition = {
@@ -128,13 +182,14 @@ export class PersonaSession extends Session {
       this._pRPersona,
       'RPERSONA_ENTER',
       {
-        twRPersonaIx: this.personaId,
+        twRPersonaIx: Number(this.personaId),
         twSessionIz: 0,
         pPosition,
       },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       async (pIAction: any) => {
         const result = pIAction.GetResult();
+        console.log(`[enterPersona] RPERSONA_ENTER result: ${result}`);
         if (result !== 0) {
           throw new Error(`RPERSONA_ENTER failed with error ${result}`);
         }
@@ -166,6 +221,7 @@ export class PersonaSession extends Session {
     this._pRPersona = null;
     this.pLnG = null;
     this._personaInfo = null;
+    this.userSession = null;
 
     this.setState(ConnectionState.Disconnected);
   }
