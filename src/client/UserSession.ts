@@ -114,33 +114,45 @@ export class UserSession extends Session {
   async openPersona(personaId: number): Promise<void> {
     const pLnG = this.pLnG;
 
-    if (pLnG && this._pRUser) {
-      await promisifyAction(
-        this._pRUser,
-        'RPERSONA_OPEN',
-        {
-          twRUserIx: this.user.twUserIx,
-          qwMapIx_Home: 0n,
-          twRPersonaIx: personaId,
-        },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        async (pIAction: any) => {
-          const result = pIAction.GetResult();
-          if (result === 0) {
-            const id = pIAction.pResponse!.twRPersonaIx;
-            return new Promise<void>((resolve) =>
-              this.setupPersonaSession(String(id), resolve)
-            );
-          } else {
-            throw new Error(`Failed to open persona ${personaId} (error ${result})`);
-          }
-        }
-      );
-    } else {
-      this._personaSession = new PersonaSession(String(personaId), pLnG);
-      await this._personaSession.connect();
-      this._initFriendsService();
+    if (!pLnG || !this._pRUser) {
+      throw new Error('UserSession not connected: pRUser model unavailable');
     }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const twRUserIx = (this._pRUser as any).twRUserIx;
+
+    // Validate parameters
+    if (typeof twRUserIx !== 'number' || twRUserIx <= 0) {
+      throw new Error(`Invalid twRUserIx from pRUser: ${twRUserIx} (type: ${typeof twRUserIx})`);
+    }
+    if (typeof personaId !== 'number' || personaId < 0) {
+      throw new Error(`Invalid personaId: ${personaId} (type: ${typeof personaId})`);
+    }
+
+    console.log(`[openPersona] Sending RPERSONA_OPEN with twRUserIx=${twRUserIx}, personaId=${personaId}`);
+
+    await promisifyAction(
+      this._pRUser,
+      'RPERSONA_OPEN',
+      {
+        twRUserIx: twRUserIx,
+        qwMapIx_Home: 0n,
+        twRPersonaIx: personaId,
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      async (pIAction: any) => {
+        const result = pIAction.GetResult();
+        if (result === 0) {
+          const id = pIAction.pResponse!.twRPersonaIx;
+          console.log(`[openPersona] Success! Created persona ID: ${id}`);
+          return new Promise<void>((resolve) =>
+            this.setupPersonaSession(String(id), resolve)
+          );
+        } else {
+          throw new Error(`Failed to open persona ${personaId} (error ${result})`);
+        }
+      }
+    );
   }
 
   /**
