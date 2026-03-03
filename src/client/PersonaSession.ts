@@ -2,7 +2,6 @@ import { Session } from "../base/Session.js";
 import { ConnectionState, PersonaInfo } from "../types/index.js";
 import { InWorldSession } from "./InWorldSession.js";
 import type { PersonaTransform } from "../avatar/PersonaPuppet.js";
-import type { UserSession } from "./UserSession.js";
 
 /**
  * Wraps a model's Send() call in a Promise using the callback pattern required
@@ -56,19 +55,22 @@ export class PersonaSession extends Session {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private pLnG: any;
 
+  // pRUser instance passed from UserSession via constructor; used to send
+  // RPERSONA_ASSUME before opening the RPersona model.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private pRUser: any;
+
   private _firstName: string | undefined;
   private _lastName: string | undefined;
 
-  private userSession: UserSession | null;
-
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  constructor(personaId: string, pLnG: any, firstName?: string, lastName?: string, userSession?: UserSession) {
+  constructor(personaId: string, pLnG: any, pRUser: any, firstName?: string, lastName?: string) {
     super();
     this.personaId = personaId;
     this.pLnG = pLnG;
+    this.pRUser = pRUser;
     this._firstName = firstName;
     this._lastName = lastName;
-    this.userSession = userSession ?? null;
   }
 
   get personaInfo(): PersonaInfo | null {
@@ -136,12 +138,12 @@ export class PersonaSession extends Session {
    * This must be done before Model_Open will work.
    */
   private send_RPERSONA_ASSUME(personaId: number): Promise<void> {
-    if (!this.userSession?.pRUser) {
-      throw new Error('[PersonaSession] UserSession pRUser not available');
+    if (!this.pRUser) {
+      throw new Error('[PersonaSession] pRUser not available for RPERSONA_ASSUME');
     }
 
     return promisifyAction(
-      this.userSession.pRUser,
+      this.pRUser,
       'RPERSONA_ASSUME',
       {
         twRPersonaIx: personaId,
@@ -152,7 +154,8 @@ export class PersonaSession extends Session {
         const result = pIAction.GetResult();
         console.log(`[send_RPERSONA_ASSUME] Result: ${result}`);
         if (result !== 0) {
-          throw new Error(`RPERSONA_ASSUME failed with error code ${result}`);
+          const errorName = this.getErrorName(result);
+          throw new Error(`RPERSONA_ASSUME failed: ${result} (${errorName})`);
         }
       }
     );
@@ -191,10 +194,28 @@ export class PersonaSession extends Session {
         const result = pIAction.GetResult();
         console.log(`[enterPersona] RPERSONA_ENTER result: ${result}`);
         if (result !== 0) {
-          throw new Error(`RPERSONA_ENTER failed with error ${result}`);
+          const errorName = this.getErrorName(result);
+          throw new Error(`RPERSONA_ENTER failed: ${result} (${errorName})`);
         }
       }
     );
+  }
+
+  /**
+   * Map MV error codes to readable names (from MV Library).
+   */
+  private getErrorName(code: number): string {
+    const errors: Record<number, string> = {
+      0: 'SUCCESS',
+      [-3]: 'INVALIDOBJECT',
+      [-18]: 'INVALIDSESSION',
+      [-34]: 'INVALIDUSERSESSION',
+      [-36]: 'INVALIDUSER',
+      [-37]: 'INVALIDRIGHTS',
+      [-40]: 'INVALIDSTATE',
+      [-45]: 'INVALIDGUEST',
+    };
+    return errors[code] ?? `UNKNOWN_ERROR_${code}`;
   }
 
   /** Relay a teleport command to the active persona puppet. */
@@ -221,7 +242,7 @@ export class PersonaSession extends Session {
     this._pRPersona = null;
     this.pLnG = null;
     this._personaInfo = null;
-    this.userSession = null;
+    this.pRUser = null;
 
     this.setState(ConnectionState.Disconnected);
   }
