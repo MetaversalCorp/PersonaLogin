@@ -13,6 +13,8 @@ import type { PersonaTransform } from '../avatar/PersonaPuppet.js';
  */
 export class UserSession extends Session {
   private readonly user: LnGUser;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private readonly _loginClient: any;
   private _personaSession: PersonaSession | null = null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private readonly pRUser: any;
@@ -24,6 +26,7 @@ export class UserSession extends Session {
   constructor(user: LnGUser, loginClient: any) {
     super();
     this.user = user;
+    this._loginClient = loginClient;
 
     // Model_Open + Attach happen IMMEDIATELY in constructor (RP1Demo pattern)
     this.pRUser = loginClient.pLnG.Model_Open('RUser', user.id);
@@ -40,6 +43,11 @@ export class UserSession extends Session {
 
   get ownPersonaList(): LnGPersona[] {
     return this._ownPersonaList;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  get pLnG(): any {
+    return this._loginClient.pLnG;
   }
 
   /**
