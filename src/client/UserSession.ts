@@ -1,8 +1,48 @@
+// MV is a global namespace populated by side-effect imports in LnG.ts.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+declare const MV: any;
+
 import { Session } from '../base/Session.js';
 import { ConnectionState } from '../types/index.js';
 import { getPFabric, LnGUser, LnGPersona } from '../mv/LnG.js';
 import { PersonaSession } from './PersonaSession.js';
 import type { PersonaTransform } from '../avatar/PersonaPuppet.js';
+
+/** Simple geographic coordinate used for persona spawn placement. */
+interface SimpleGeoPos {
+  lat: number;    // degrees
+  lon: number;    // degrees
+  radius: number; // metres (planet radius + altitude)
+}
+
+/**
+ * Convert a simple lat/lon/radius geo position to a Double3 cartesian vector
+ * in the Y-up coordinate system used by the MV position protocol.
+ */
+function geoPosSimpleToDouble3(geoPos: SimpleGeoPos): { dX: number; dY: number; dZ: number } {
+  const lat = geoPos.lat * Math.PI / 180;
+  const lon = geoPos.lon * Math.PI / 180;
+  const r = geoPos.radius;
+  const cosLat = Math.cos(lat);
+  return {
+    dX: r * cosLat * Math.sin(lon),
+    dY: r * Math.sin(lat),
+    dZ: r * cosLat * Math.cos(lon),
+  };
+}
+
+/**
+ * Apply a small random scatter to a starting geo position to spread out
+ * persona spawn points and avoid stacking all new personas at the same spot.
+ */
+function applyScatterToStartGeoPos(geoPos: SimpleGeoPos): SimpleGeoPos {
+  const scatter = 0.001; // ~111 m scatter radius at the equator
+  return {
+    lat: geoPos.lat + (Math.random() - 0.5) * scatter,
+    lon: geoPos.lon + (Math.random() - 0.5) * scatter,
+    radius: geoPos.radius,
+  };
+}
 
 /**
  * Wraps a model's Send() call in a Promise using the callback pattern required
@@ -53,6 +93,12 @@ export class UserSession extends Session {
   private _ownPersonaList: LnGPersona[] = [];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private _friendsService: any = null;
+
+  /** Celestial object ID used as the parent reference when placing a new persona. */
+  startingLocationCelestialID: number | string = 0;
+
+  /** Starting geographic position used as the base for new-persona spawn scatter. */
+  private _startGeoPos: SimpleGeoPos = { lat: 0, lon: 0, radius: 6_371_000 };
 
   constructor(user: LnGUser) {
     super();
@@ -119,42 +165,50 @@ export class UserSession extends Session {
    */
   async createPersona(firstName: string, lastName?: string): Promise<void> {
     const pLnG = this.pLnG;
-    let personaId: string;
 
     if (pLnG && this._pRUser) {
-      personaId = await promisifyAction(
+      const geoPosScattered = applyScatterToStartGeoPos(this._startGeoPos);
+      await promisifyAction(
         this._pRUser,
         'RPERSONA_OPEN',
         {
-          // qwMapIx_Home: 0n — server assigns a default home map for the new persona.
-          qwMapIx_Home: 0n,
+          // qwMapIx_Home: 0 — plain number; server assigns a default home map.
+          qwMapIx_Home: 0,
           pName: {
             wsForename: firstName,
             wsSurname: lastName ?? '',
             // dwSequence: 0 — server assigns the disambiguation sequence number.
             dwSequence: 0,
           },
+          pPosition: {
+            pParent: {
+              twObjectIx: this.startingLocationCelestialID,
+              wClass: MV.MVMF.Core.Namespace_Get('metaversal/rp1').SourceClass_Get('MVSB', 'RMCObject').pSource_Factory.pReference.wClass,
+            },
+            pRelative: {
+              vPosition: geoPosSimpleToDouble3(geoPosScattered),
+            },
+          },
         },
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         async (pIAction: any) => {
           const result = pIAction.GetResult();
-          if (result !== 0) {
+          if (result === 0) {
+            const id = pIAction.pResponse!.twRPersonaIx;
+            return new Promise<void>((resolve) =>
+              this.setupPersonaSession(String(id), resolve, firstName, lastName)
+            );
+          } else {
             throw new Error(`Persona creation failed (error ${result})`);
           }
-          const twRPersonaIx = pIAction.pResponse?.twRPersonaIx;
-          if (!twRPersonaIx) {
-            throw new Error('Persona creation failed: server returned no persona ID');
-          }
-          return String(twRPersonaIx);
         }
       );
     } else {
-      personaId = `${firstName}${lastName ? `_${lastName}` : ''}_${Date.now()}`;
+      const personaId = `${firstName}${lastName ? `_${lastName}` : ''}_${Date.now()}`;
+      this._personaSession = new PersonaSession(personaId, pLnG, firstName, lastName);
+      await this._personaSession.connect();
+      this._initFriendsService();
     }
-
-    this._personaSession = new PersonaSession(personaId, pLnG, firstName, lastName);
-    await this._personaSession.connect();
-    this._initFriendsService();
   }
 
   /**
@@ -183,6 +237,23 @@ export class UserSession extends Session {
    */
   teleportTo(celestialId: string, position: Omit<PersonaTransform, 'rotY'>): void {
     this._personaSession?.teleportTo(celestialId, position);
+  }
+
+  /**
+   * Set up a PersonaSession for the given persona ID after successful creation,
+   * then resolve the enclosing promise once the session is connected.
+   */
+  private setupPersonaSession(
+    id: string,
+    resolve: (value: void | PromiseLike<void>) => void,
+    firstName: string,
+    lastName?: string
+  ): void {
+    this._personaSession = new PersonaSession(id, this.pLnG, firstName, lastName);
+    void this._personaSession.connect().then(() => {
+      this._initFriendsService();
+      resolve();
+    });
   }
 
   /**
