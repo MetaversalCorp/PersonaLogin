@@ -56,13 +56,14 @@ export class PersonaPuppet extends Avatar {
   }
 
   /**
-   * Move the avatar to a new world position.
-   * Updates the stored transform; call sendUpdate() to push it to the service.
+   * Move the avatar to a new world position and transmit it to the service.
+   * @param celestialId - The pParent celestial body identifier; defaults to '0'.
    */
-  moveTo(transform: PersonaTransform): void {
+  moveTo(transform: PersonaTransform, celestialId: string = '0'): void {
     if (!this._spawned) return;
     this.transform = { ...transform };
     console.log(`[PersonaPuppet] moveTo`, this.transform);
+    this.sendUpdate(celestialId);
   }
 
   /**
