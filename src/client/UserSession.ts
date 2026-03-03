@@ -36,6 +36,10 @@ export class UserSession extends Session {
     return this._ownPersonaList;
   }
 
+  get pRUser(): unknown {
+    return this._pRUser;
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private get pLnG(): any {
     return getPFabric()?.pLnG ?? null;
@@ -110,7 +114,7 @@ export class UserSession extends Session {
     firstName?: string,
     lastName?: string
   ): void {
-    this._personaSession = new PersonaSession(id, this.pLnG, firstName, lastName);
+    this._personaSession = new PersonaSession(id, this.pLnG, firstName, lastName, this);
     void this._personaSession.connect().then(() => {
       this._initFriendsService();
       resolve();
