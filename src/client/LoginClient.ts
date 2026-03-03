@@ -313,7 +313,7 @@ export class LoginClient {
 
     try {
       const user = await this.pLnG.Login(MV.MVMF.Encode({ contact: GUEST_EMAIL, password: GUEST_EMAIL }));
-      this.appendStatus(`Guest session started as "${user.displayName}".`);
+      this.appendStatus(`Guest session started as "${[firstName, lastName].filter(Boolean).join(" ")}".`);
       this.updateStatusBadge("success");
 
       this.userSession = new UserSession(user);

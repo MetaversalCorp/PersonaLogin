@@ -27,10 +27,15 @@ export class PersonaSession extends Session {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private pLnG: any;
 
-  constructor(personaId: string, pLnG: any) {
+  private _firstName: string | undefined;
+  private _lastName: string | undefined;
+
+  constructor(personaId: string, pLnG: any, firstName?: string, lastName?: string) {
     super();
     this.personaId = personaId;
     this.pLnG = pLnG;
+    this._firstName = firstName;
+    this._lastName = lastName;
   }
 
   get personaInfo(): PersonaInfo | null {
@@ -58,7 +63,7 @@ export class PersonaSession extends Session {
 
     this._personaInfo = new PersonaInfo(
       this.personaId,
-      `Persona_${this.personaId}`,
+      [this._firstName, this._lastName].filter(Boolean).join(" ") || `Persona_${this.personaId}`,
       "",
       "default_world",
       "default_region"
