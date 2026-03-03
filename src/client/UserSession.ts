@@ -181,24 +181,30 @@ export class UserSession extends Session {
     if (!this.pLnG || !this.pRUser) {
       throw new Error("[UserSession] pRUser is not available; cannot create persona");
     }
+    const twRUserIx = parseInt(this.userId, 10);
+    if (!firstName) throw new Error("[UserSession] RPERSONA_OPEN: forename is undefined or empty");
+    if (!lastName) throw new Error("[UserSession] RPERSONA_OPEN: surname is undefined or empty");
+    if (isNaN(twRUserIx)) throw new Error("[UserSession] RPERSONA_OPEN: twRUserIx is not a valid number");
     const wClass = getRMCObjectWClass();
+    const requestData = {
+      twRUserIx,
+      qwMapIx_Home: 0,
+      pName: { wsForename: firstName, wsSurname: lastName, dwSequence: 0 },
+      pPosition: {
+        pParent: {
+          twObjectIx: CELESTIAL_ID_EARTH,
+          wClass: wClass,
+        },
+        pRelative: {
+          vPosition: geoPosSimpleToDouble3(START_LOCATION_GEOPOS_NORMAL),
+        },
+      },
+    };
+    console.log("[UserSession] RPERSONA_OPEN params:", JSON.stringify(requestData));
     const result = await promisifyAction(
       this.pRUser,
       'RPERSONA_OPEN',
-      {
-        twRUserIx: parseInt(this.userId, 10),
-        qwMapIx_Home: 0,
-        pName: { wsForename: firstName, wsSurname: lastName, dwSequence: 0 },
-        pPosition: {
-          pParent: {
-            twObjectIx: CELESTIAL_ID_EARTH,
-            wClass: wClass,
-          },
-          pRelative: {
-            vPosition: geoPosSimpleToDouble3(START_LOCATION_GEOPOS_NORMAL),
-          },
-        },
-      }
+      requestData
     );
     const rawId = result.pResponse?.twRPersonaIx;
     if (rawId == null) {
