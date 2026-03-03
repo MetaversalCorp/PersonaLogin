@@ -55,8 +55,7 @@ export class PersonaSession extends Session {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private pLnG: any;
 
-  // pRUser instance passed from UserSession via constructor; used to send
-  // RPERSONA_ASSUME before opening the RPersona model.
+  // pRUser instance passed from UserSession via constructor.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private pRUser: any;
 
@@ -88,36 +87,22 @@ export class PersonaSession extends Session {
       throw new Error(`[PersonaSession] pLnG is not available; cannot open RPersona model`);
     }
 
-    const numericId = Number(this.personaId);
-    if (isNaN(numericId)) {
-      throw new Error(`[PersonaSession] personaId '${this.personaId}' is not a valid number`);
-    }
-
-    // Step 1: Assume the persona on the server (must happen before Model_Open).
-    console.log(`[PersonaSession] Assuming persona ${this.personaId}...`);
-    try {
-      await this.send_RPERSONA_ASSUME(numericId);
-    } catch (err) {
-      console.error(`[PersonaSession] RPERSONA_ASSUME failed:`, err);
-      throw new Error(`Failed to assume persona ${this.personaId}: ${(err as Error).message}`);
-    }
-
-    // Step 2: Now open the RPersona model (works after assume).
+    // Step 1: Open the RPersona model directly (like RP1Demo does).
     console.log(`[PersonaSession] Opening RPersona model for ${this.personaId}...`);
     const pRPersona = this.pLnG.Model_Open('RPersona', `${this.personaId}`);
     if (!pRPersona) {
-      throw new Error(`[PersonaSession] Model_Open('RPersona', '${this.personaId}') returned null after RPERSONA_ASSUME`);
+      throw new Error(`[PersonaSession] Model_Open('RPersona', '${this.personaId}') returned null`);
     }
     this._pRPersona = pRPersona;
     console.log(`[PersonaSession] RPersona model opened successfully`);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (this._pRPersona as any).Attach(this);
 
-    // Step 3: Enter the world with RPERSONA_ENTER.
+    // Step 2: Enter the world with RPERSONA_ENTER.
     console.log(`[PersonaSession] Entering world...`);
     await this.enterPersona();
 
-    // Step 4: Set up persona info and in-world session.
+    // Step 3: Set up persona info and in-world session.
     this._personaInfo = new PersonaInfo(
       this.personaId,
       [this._firstName, this._lastName].filter(Boolean).join(" ") || `Persona_${this.personaId}`,
@@ -131,34 +116,6 @@ export class PersonaSession extends Session {
 
     console.log(`[PersonaSession] Connected! In world as persona ${this.personaId}`);
     this.setState(ConnectionState.InWorld);
-  }
-
-  /**
-   * Send RPERSONA_ASSUME to assume the persona on the server.
-   * This must be done before Model_Open will work.
-   */
-  private send_RPERSONA_ASSUME(personaId: number): Promise<void> {
-    if (!this.pRUser) {
-      throw new Error('[PersonaSession] pRUser not available for RPERSONA_ASSUME');
-    }
-
-    return promisifyAction(
-      this.pRUser,
-      'RPERSONA_ASSUME',
-      {
-        twRPersonaIx: personaId,
-        twSessionIz: 0,
-      },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      async (pIAction: any) => {
-        const result = pIAction.GetResult();
-        console.log(`[send_RPERSONA_ASSUME] Result: ${result}`);
-        if (result !== 0) {
-          const errorName = this.getErrorName(result);
-          throw new Error(`RPERSONA_ASSUME failed: ${result} (${errorName})`);
-        }
-      }
-    );
   }
 
   /**
