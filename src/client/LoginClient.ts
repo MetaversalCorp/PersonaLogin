@@ -143,7 +143,7 @@ export class LoginClient {
     const user = this.pendingUser;
     this.pendingUser = null;
 
-    this.userSession = new UserSession(user, this._pLnG);
+    this.userSession = new UserSession(user);
     await this.userSession.connect();
 
     this.appendStatus(`Entering world with persona ${personaId}…`);
@@ -280,7 +280,7 @@ export class LoginClient {
       this.updateStatusBadge("success");
 
       this.pendingUser = user;
-      this.userSession = new UserSession(user, this._pLnG);
+      this.userSession = new UserSession(user);
       await this.userSession.connect();
 
       // Wait for personas to be enumerated by onReadyState/Child_Enum
@@ -325,7 +325,7 @@ export class LoginClient {
       this.appendStatus(`Guest session started.`);
       this.updateStatusBadge("success");
 
-      this.userSession = new UserSession(user, this._pLnG);
+      this.userSession = new UserSession(user);
       await this.userSession.connect();
 
       // Wait for personas to be enumerated by onReadyState/Child_Enum
@@ -351,7 +351,7 @@ export class LoginClient {
     if (!this.pendingUser) return;
 
     const user = this.pendingUser;
-    this.userSession = new UserSession(user, this._pLnG);
+    this.userSession = new UserSession(user);
     await this.userSession.connect();
 
     this.appendStatus(`Opening persona…`);
