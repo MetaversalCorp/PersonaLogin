@@ -94,8 +94,9 @@ export class UserSession extends Session {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private _friendsService: any = null;
 
-  /** Celestial object ID used as the parent reference when placing a new persona. */
-  startingLocationCelestialID: number | string = 0;
+  /** Celestial object ID used as the parent reference when placing a new persona.
+   *  Defaults to 104, which is the production Earth celestial ID (matches the HTML location presets). */
+  startingLocationCelestialID: number = 104;
 
   /** Starting geographic position used as the base for new-persona spawn scatter. */
   private _startGeoPos: SimpleGeoPos = { lat: 0, lon: 0, radius: 6_371_000 };
@@ -175,11 +176,14 @@ export class UserSession extends Session {
     const pLnG = this.pLnG;
 
     if (pLnG && this._pRUser) {
+      const celestialID = this.startingLocationCelestialID;
+      if (typeof celestialID !== 'number' || !Number.isInteger(celestialID) || celestialID <= 0) {
+        throw new Error(`[createPersona] Invalid startingLocationCelestialID: ${celestialID} (expected a positive integer, e.g. 104 for Earth)`);
+      }
+
       const geoPosScattered = applyScatterToStartGeoPos(this._startGeoPos);
       const requestData = {
         twRUserIx: this.user.twUserIx,
-        // twSecureDoorIx: 0n — required TWORD8 field in RPERSONA_OPEN MAP; 0 means no secure door.
-        twSecureDoorIx: BigInt(0),
         // qwMapIx_Home: 0 — plain number; server assigns a default home map.
         qwMapIx_Home: 0,
         pName: {
@@ -190,7 +194,7 @@ export class UserSession extends Session {
         },
         pPosition: {
           pParent: {
-            twObjectIx: this.startingLocationCelestialID,
+            twObjectIx: celestialID,
             wClass: MV.MVMF.Core.Namespace_Get('metaversal/rp1').SourceClass_Get('MVSB', 'RMCObject').pSource_Factory.pReference.wClass,
           },
           pRelative: {
@@ -206,6 +210,7 @@ export class UserSession extends Session {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         async (pIAction: any) => {
           const result = pIAction.GetResult();
+          console.debug('[createPersona] RPERSONA_OPEN result:', result);
           if (result === 0) {
             const id = pIAction.pResponse!.twRPersonaIx;
             return new Promise<void>((resolve) =>
