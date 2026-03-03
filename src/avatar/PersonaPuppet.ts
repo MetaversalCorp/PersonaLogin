@@ -1,6 +1,7 @@
 import { PersonaInfo } from "../types/index.js";
 import { Avatar } from "./Avatar.js";
 import { FlagQueue } from "../utils/FlagQueue.js";
+import type { InWorldSession } from "../client/InWorldSession.js";
 
 export interface PersonaTransform {
   x: number;
@@ -17,16 +18,12 @@ export interface PersonaTransform {
 export class PersonaPuppet extends Avatar {
   private flagQueue: FlagQueue;
   private transform: PersonaTransform = { x: 0, y: 0, z: 0, rotY: 0 };
+  private readonly inWorldSession: InWorldSession | null;
 
-  // rPersona instance from @metaversalcorp/mvrp.
-  // Type is kept as `unknown` because the private package cannot be resolved
-  // in open-source builds; cast to the real type when the package is available.
-  // import('@metaversalcorp/mvrp').RPersona
-  private rPersona: unknown = null;
-
-  constructor(personaInfo: PersonaInfo) {
+  constructor(personaInfo: PersonaInfo, inWorldSession: InWorldSession | null = null) {
     super(personaInfo);
     this.flagQueue = new FlagQueue();
+    this.inWorldSession = inWorldSession;
   }
 
   async spawn(): Promise<void> {
@@ -36,7 +33,6 @@ export class PersonaPuppet extends Avatar {
     // const { RPersona } = await import('@metaversalcorp/mvrp');
     // this.rPersona = new RPersona({ personaId: this.personaId });
     // await (this.rPersona as RPersona).spawn(this.transform);
-    this.rPersona = { personaId: this.personaId };
 
     this._spawned = true;
     console.log(`[PersonaPuppet] Spawned persona ${this.personaId} as "${this.displayName}"`);
@@ -48,8 +44,7 @@ export class PersonaPuppet extends Avatar {
     this.flagQueue.clear();
 
     // Real call (requires @metaversalcorp/mvrp at runtime):
-    // (this.rPersona as RPersona).Send({ type: 'despawn' });
-    this.rPersona = null;
+    // this.getRPersona()?.Send({ type: 'despawn' });
     this._spawned = false;
 
     console.log(`[PersonaPuppet] Despawned persona ${this.personaId}`);
@@ -73,8 +68,7 @@ export class PersonaPuppet extends Avatar {
   sendUpdate(celestialId: string): void {
     if (!this._spawned) return;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const rPersona = this.rPersona as any;
+    const rPersona = this.getRPersona();
     if (!rPersona?.Send) return;
 
     const tmStamp = Date.now();
@@ -130,5 +124,10 @@ export class PersonaPuppet extends Avatar {
 
   getTransform(): PersonaTransform {
     return { ...this.transform };
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private getRPersona(): any {
+    return this.inWorldSession?.personaSession?.pRPersona;
   }
 }
