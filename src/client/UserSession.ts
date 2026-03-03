@@ -71,11 +71,15 @@ export class UserSession extends Session {
    * Enumerates existing personas when RUser is RECOVERED.
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  onReadyState(_pNotice: any): void {
+  onReadyState(pNotice: any): void {
     if (!this._pRUser) return;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const pRUser = this._pRUser as any;
+
+    // Verify notification is for our pRUser instance
+    if (pNotice.pCreator !== pRUser) return;
+
     const readyState = pRUser.ReadyState?.();
 
     console.log('[UserSession] onReadyState fired, readyState:', readyState);
