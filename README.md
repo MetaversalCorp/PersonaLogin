@@ -58,7 +58,7 @@ Starts a local development server with hot reload (powered by `chokidar`). Open 
 npm run serve
 ```
 
-Serves the `deploy/` folder on port **8080** via `http-server`.
+Serves the `deploy/` folder on port **8090** via `http-server`.
 
 ### Type-check Only (no emit)
 
@@ -73,6 +73,11 @@ No `.env` file is required for local development. Server endpoints and session p
 ---
 
 ## 2. Client App Overview
+
+### How to run
+
+1. `npm run dev` starts the local webserver on port 8090
+2. In a web browser, go to URL `http://localhost:8090`
 
 ### What PersonaLogin Does
 
