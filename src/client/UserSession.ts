@@ -152,7 +152,12 @@ export class UserSession extends Session {
    * Relay a teleport command to the active PersonaSession.
    */
   teleportTo(celestialId: string, position: { x: number; y: number; z: number }): void {
-    this._personaSession?.teleportTo(celestialId, position);
+    if (!this._personaSession) {
+      console.error('[UserSession] No PersonaSession for teleport');
+      return;
+    }
+
+    this._personaSession.teleportTo(celestialId, position);
   }
 
   /**

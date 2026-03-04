@@ -51,19 +51,26 @@ export class InWorldSession extends Session {
       return;
     }
 
-    const positionUniversal = {
-      pParent: {
-        twObjectIx,
-        wClass: 0
-      },
-      pRelative: {
-        dwX: position.x,
-        dwY: position.y,
-        dwZ: position.z
-      }
-    };
+    console.log(`[InWorldSession] Teleporting to celestial ${celestialId}:`, position);
 
-    console.log('[InWorldSession] Teleporting:', positionUniversal);
-    this.puppet.moveTo(positionUniversal);
+    try {
+      const positionUniversal = {
+        pParent: {
+          twObjectIx,
+          wClass: 0,
+        },
+        pRelative: {
+          vPosition: {
+            dX: position.x,
+            dY: position.y,
+            dZ: position.z,
+          },
+        },
+      };
+
+      this.puppet.moveTo(positionUniversal);
+    } catch (err) {
+      console.error('[InWorldSession] moveTo failed:', err);
+    }
   }
 }
