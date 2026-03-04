@@ -51,8 +51,9 @@ export class InWorldSession extends Session {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const pRPersona = this.personaSession.pRPersona as any;
 
+      const tmStamp: number = typeof pRPersona.pTime === 'number' ? pRPersona.pTime : Date.now();
       const updatePayload = {
-        tmStamp: Date.now(),
+        tmStamp,
         pState: {
           bControl: true,
           bVolume: 0,
@@ -92,9 +93,9 @@ export class InWorldSession extends Session {
           pRotation_Hand_Right: {
             dwV: pRPersona.Quat_Encode([0, 0, 0, 1]),
           },
-          bHand_Left: [6, 5, 4, 3, 2, 1],   // Default closed-hand finger values
-          bHand_Right: [16, 15, 14, 13, 12, 11], // Default closed-hand finger values
-          bFace: [24, 23, 22, 21],            // Default neutral face expression
+          bHand_Left: Array.from(new Uint8Array(6)),   // Default neutral hand grip (all zeros)
+          bHand_Right: Array.from(new Uint8Array(6)),  // Default neutral hand grip (all zeros)
+          bFace: [24, 23, 22, 21],                     // Default neutral face expression
         },
         wSamples: 0,
         wCodec: 0,
