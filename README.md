@@ -52,19 +52,6 @@ npm run dev
 
 Starts a local development server with hot reload (powered by `chokidar`). Open the URL printed to the console in your browser.
 
-### Serve Production Build
-
-```bash
-npm run serve
-```
-
-Serves the `deploy/` folder on port **8090** via `http-server`.
-
-### Type-check Only (no emit)
-
-```bash
-npm run typecheck
-```
 
 ### Environment Setup
 
