@@ -182,7 +182,12 @@ export class PersonaSession extends Session {
 
   /** Relay a teleport command to the active in-world session. */
   public teleportTo(celestialId: string, position: { x: number; y: number; z: number }): void {
-    this.inWorldSession?.teleportTo(celestialId, position);
+    if (!this.inWorldSession) {
+      console.error('[PersonaSession] No InWorldSession for teleport');
+      return;
+    }
+
+    this.inWorldSession.teleportTo(celestialId, position);
   }
 
   async disconnect(): Promise<void> {

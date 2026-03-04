@@ -12,7 +12,7 @@ export interface PersonaTransform {
 
 export interface PositionUniversal {
   pParent: { twObjectIx: number; wClass: number };
-  pRelative: { dwX: number; dwY: number; dwZ: number };
+  pRelative: { vPosition: { dX: number; dY: number; dZ: number } };
 }
 
 /**
@@ -62,15 +62,13 @@ export class PersonaPuppet extends Avatar {
   moveTo(positionUniversal: PositionUniversal): void {
     if (!this._spawned) return;
     this.transform = {
-      x: positionUniversal.pRelative.dwX,
-      y: positionUniversal.pRelative.dwY,
-      z: positionUniversal.pRelative.dwZ,
+      x: positionUniversal.pRelative.vPosition.dX,
+      y: positionUniversal.pRelative.vPosition.dY,
+      z: positionUniversal.pRelative.vPosition.dZ,
       rotY: 0,
     };
     console.log(`[PersonaPuppet] moveTo`, positionUniversal);
-    const rPersona = this.getRPersona();
-    if (!rPersona?.Send) return;
-    rPersona.Send('TELEPORT', { pPosition: positionUniversal });
+    this.sendUpdate(String(positionUniversal.pParent.twObjectIx));
   }
 
   /**
