@@ -40,37 +40,74 @@ export class InWorldSession extends Session {
   }
 
   public teleportTo(celestialId: string, position: { x: number; y: number; z: number }): void {
-    if (!this.puppet) {
-      console.error('[InWorldSession] No puppet for teleport');
+    if (!this.personaSession || !this.personaSession.pRPersona) {
+      console.error('[InWorldSession] No PersonaSession or pRPersona for teleport');
       return;
     }
 
-    const twObjectIx = Number(celestialId);
-    if (isNaN(twObjectIx)) {
-      console.error('[InWorldSession] Invalid celestialId:', celestialId);
-      return;
-    }
-
-    console.log(`[InWorldSession] Teleporting to celestial ${celestialId}:`, position);
+    console.log(`[InWorldSession] Sending UPDATE to reposition to ${celestialId}:`, position);
 
     try {
-      const positionUniversal = {
-        pParent: {
-          twObjectIx,
-          wClass: 0,
-        },
-        pRelative: {
-          vPosition: {
-            dX: position.x,
-            dY: position.y,
-            dZ: position.z,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const pRPersona = this.personaSession.pRPersona as any;
+
+      const updatePayload = {
+        tmStamp: Date.now(),
+        pState: {
+          bControl: true,
+          bVolume: 0,
+          wFlag: 0,
+          bSerial_A: 0,
+          bSerial_B: 0,
+          wOrder: 0,
+          bCoordSys: 156, // Universal coordinate system (matches RP1Demo PersonaPuppet)
+          pPosition_Head: {
+            pParent: {
+              twObjectIx: Number(celestialId),
+              wClass: 0,
+            },
+            pRelative: {
+              vPosition: {
+                dX: position.x,
+                dY: position.y,
+                dZ: position.z,
+              },
+            },
           },
+          pRotation_Head: {
+            dwV: pRPersona.Quat_Encode([0, 0, 0, 1]),
+          },
+          pRotation_Body: {
+            dwV: pRPersona.Quat_Encode([0, 0, 0, 1]),
+          },
+          pPosition_Hand_Left: {
+            dwV: pRPersona.Vect_Encode([0, 0, 0]),
+          },
+          pRotation_Hand_Left: {
+            dwV: pRPersona.Quat_Encode([0, 0, 0, 1]),
+          },
+          pPosition_Hand_Right: {
+            dwV: pRPersona.Vect_Encode([0, 0, 0]),
+          },
+          pRotation_Hand_Right: {
+            dwV: pRPersona.Quat_Encode([0, 0, 0, 1]),
+          },
+          bHand_Left: [6, 5, 4, 3, 2, 1],   // Default closed-hand finger values
+          bHand_Right: [16, 15, 14, 13, 12, 11], // Default closed-hand finger values
+          bFace: [24, 23, 22, 21],            // Default neutral face expression
         },
+        wSamples: 0,
+        wCodec: 0,
+        wSize: 0,
+        abData: new Uint8Array(0),
       };
 
-      this.puppet.moveTo(positionUniversal);
+      console.log('[InWorldSession] Calling pRPersona.Send("UPDATE", ...)');
+      pRPersona.Send('UPDATE', updatePayload);
+      console.log('[InWorldSession] UPDATE sent successfully');
     } catch (err) {
-      console.error('[InWorldSession] moveTo failed:', err);
+      console.error('[InWorldSession] UPDATE Send failed:', err);
+      throw err;
     }
   }
 }
