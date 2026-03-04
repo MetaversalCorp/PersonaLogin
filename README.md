@@ -34,7 +34,9 @@ cd PersonaLogin
 npm install
 ```
 
-> **Note:** The Metaversal MV library packages (`@metaversalcorp/mvio`, `@metaversalcorp/mvrp`, etc.) are private npm packages. Ensure your npm registry is configured with access to the `@metaversalcorp` scope before running `npm install`.
+> **Note:** The Metaversal MV library packages are locally stored in the vendor/mv subfolder. NOTE: They are not automatically updated.
+> This is to remove dependency on the private @metaversalcorp npm packages
+
 
 ### Build
 
