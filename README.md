@@ -70,13 +70,13 @@ No `.env` file is required for local development. Server endpoints and session p
 
 ### What PersonaLogin Does
 
-PersonaLogin is the member-facing login and avatar entry client for the **Metaversal RP1** platform. It authenticates users (or guests) via the MV LnG service, lets them pick a persona, loads their avatar model, and places the avatar into the virtual world. Once in-world, users can reposition their avatar (teleport) to any location on any celestial body.
+PersonaLogin is the member-facing login and avatar entry client for the **Metaversal RP1** platform. It authenticates users via the MV LnG service, lets them pick a persona, loads their avatar model, and places the avatar into the virtual world. Once in-world, users can reposition their avatar (teleport) to any location on any celestial body.
 
 ### Key Workflows
 
 | Workflow | Description |
 |---|---|
-| **User authentication** | Member or guest credentials are encoded with `MV.MVMF.Encode` and passed to `pLnG.Login()`. LnG handles all HTTP communication with RP1 servers and token exchange internally. Optional 2FA is handled via a callback/promise flow. |
+| **User authentication** | Member credentials are encoded with `MV.MVMF.Encode` and passed to `pLnG.Login()`. LnG handles all HTTP communication with RP1 servers and token exchange internally. Optional 2FA is handled via a callback/promise flow. |
 | **Persona selection** | After login, the user's personas are enumerated via `pRUser.Child_Enum('RPersona', …)`. The first persona is auto-selected, or the user can choose one from the picker UI. |
 | **Avatar model loading** | `PersonaPuppet.spawn()` loads the avatar model via `@metaversalcorp/mvrp` at runtime. |
 | **Avatar entry into world** | `pRUser.Send('RPERSONA_ENTER', …)` places the avatar at the starting location. The `pRPersona` model is opened with `pLnG.Model_Open('RPersona', personaId)`. |
@@ -108,7 +108,6 @@ LoginClient  (entry point — UI wiring + auth flow)
 
 - **Member login** with email/password and optional "remember me"
 - **2FA support** via a callback that pauses the login flow
-- **Guest login** using the MV `GUEST_EMAIL` sentinel
 - **Persona auto-selection** (first persona) with fallback to manual picker
 - **Persona creation** flow for new members with no personas
 - **Lat/lon → Cartesian teleport** with named location presets
