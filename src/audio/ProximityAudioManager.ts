@@ -19,19 +19,12 @@ import { AVStreamAudioPlayer } from './AVStreamAudioPlayer.js';
  * ──────────────
  *   Server → MV.MVRP.Proximity.onRecv_Request()
  *          → MV.MVRP.Audio.Output()           [decode codec 0 / codec 1]
- *          → tapNode (GainNode)               [analysis tap point]
  *          → AudioContext.destination          [basic speaker playback]
  *
  *   Additionally, an AVStreamAudioPlayer is created over the same AudioContext,
  *   providing a GainNode → PannerNode → destination chain for spatial audio.
  *   Callers that need per-source volume or 3-D positioning can obtain the player
  *   via getAudioPlayer() and route decoded buffers through it.
- *
- * Analysis tap
- * ────────────
- *   connectAudioTap(node)    – splice an AnalyserNode/ChannelSplitterNode into
- *                              the MVRP output path for real-time monitoring
- *   disconnectAudioTap(node) – remove the tap when monitoring is no longer needed
  *
  * Mute / deaf controls
  * ─────────────────────
@@ -45,7 +38,6 @@ export class ProximityAudioManager {
   private proximity: any = null;
   private audioPlayer: AVStreamAudioPlayer | null = null;
   private audioContext: AudioContext | null = null;
-  private tapNode: GainNode | null = null;
   private _started: boolean = false;
 
   /**
@@ -99,24 +91,6 @@ export class ProximityAudioManager {
         this.audioContext = ctx;
         this.audioPlayer = new AVStreamAudioPlayer(ctx);
 
-        // Insert a tap GainNode between MVRP's output and the speakers so
-        // that analysis nodes (e.g. AudioVisualizer) can monitor the stream.
-        this.tapNode = ctx.createGain();
-        this.tapNode.connect(ctx.destination);
-
-        // MVRP's Start() connects its internal ScriptProcessorNode
-        // (m_pNode_Processor) directly to ctx.destination.  Re-route it
-        // through tapNode so that analysis nodes receive the live signal:
-        //   m_pNode_Processor → tapNode → ctx.destination
-        const processorNode = mvAudio.m_pNode_Processor;
-        if (processorNode) {
-          try { processorNode.disconnect(ctx.destination); } catch { /* already disconnected */ }
-          processorNode.connect(this.tapNode);
-          console.log('[ProximityAudioManager] MVRP processor re-routed through tapNode');
-        } else {
-          console.warn('[ProximityAudioManager] m_pNode_Processor not found; tap may receive no signal');
-        }
-
         console.log('[ProximityAudioManager] AVStreamAudioPlayer ready (sampleRate:', ctx.sampleRate, 'Hz)');
       }
 
@@ -135,11 +109,6 @@ export class ProximityAudioManager {
   stop(): void {
     if (!this._started) return;
     this._started = false;
-
-    if (this.tapNode) {
-      try { this.tapNode.disconnect(); } catch { /* ignore */ }
-      this.tapNode = null;
-    }
 
     if (this.audioPlayer) {
       this.audioPlayer.disconnect();
@@ -185,33 +154,6 @@ export class ProximityAudioManager {
   }
 
   // ─── Accessors ────────────────────────────────────────────────────────────
-
-  /**
-   * Connect an audio node to the MVRP output tap for real-time monitoring.
-   *
-   * The tap is a GainNode that sits between MVRP's decoded audio output and
-   * `AudioContext.destination`.  Connecting an AnalyserNode or
-   * ChannelSplitterNode here allows the signal to be inspected without
-   * affecting playback.
-   *
-   * Has no effect if audio has not been started yet.
-   *
-   * @param destination  The Web Audio node to receive the tapped signal.
-   */
-  connectAudioTap(destination: AudioNode): void {
-    this.tapNode?.connect(destination);
-  }
-
-  /**
-   * Remove a previously connected tap node.
-   *
-   * @param destination  The node originally passed to `connectAudioTap()`.
-   */
-  disconnectAudioTap(destination: AudioNode): void {
-    try {
-      this.tapNode?.disconnect(destination);
-    } catch { /* ignore: node may already be disconnected */ }
-  }
 
   /**
    * Returns the AudioContext for this session, or `null` if audio has not

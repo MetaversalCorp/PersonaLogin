@@ -2,13 +2,11 @@ import type { ProximityAudioManager } from '../audio/ProximityAudioManager.js';
 
 /** Options for configuring the AudioVisualizer. */
 export interface VisualizerOptions {
-  /** FFT size (power of two) – determines the number of samples analysed. Default: 1024. */
-  fftSize?: number;
   /** Background colour of the canvas. Default: 'rgba(0,0,0,0.45)'. */
   backgroundColor?: string;
-  /** Waveform colour for the left channel. Default: '#00eaff' (cyan). */
+  /** Bar colour for the left channel. Default: '#00eaff' (cyan). */
   colorLeft?: string;
-  /** Waveform colour for the right channel. Default: '#ff00cc' (magenta). */
+  /** Bar colour for the right channel. Default: '#ff00cc' (magenta). */
   colorRight?: string;
 }
 
@@ -18,13 +16,14 @@ export interface VisualizerOptions {
  *
  * Lifecycle
  * ─────────
- *   const vis = new AudioVisualizer(containerEl, { fftSize: 1024 });
+ *   const vis = new AudioVisualizer(containerEl);
  *   vis.attachAudioSource(proximityAudioManager);   // begins animation loop
  *   …avatar is active…
  *   vis.dispose();                                  // stops loop, removes canvas
  *
- * When no audio source is attached `update()` can be called directly with
- * pre-decoded Float32Array channel data for testing or alternative integrations.
+ * Audio levels are read directly from MVRP's internal `m_Output.asLevel` array
+ * each animation frame.  When no audio source is attached, `update()` can be
+ * called directly with normalised L/R amplitude values for testing.
  */
 export class AudioVisualizer {
   private readonly container: HTMLElement;
@@ -32,16 +31,12 @@ export class AudioVisualizer {
   private readonly ctx2d: CanvasRenderingContext2D;
   private readonly opts: Required<VisualizerOptions>;
 
-  // Web Audio analysis nodes (created in attachAudioSource)
-  private audioContext: AudioContext | null = null;
+  // MVRP audio manager reference (set in attachAudioSource)
   private audioManager: ProximityAudioManager | null = null;
-  private analyserL: AnalyserNode | null = null;
-  private analyserR: AnalyserNode | null = null;
-  private splitter: ChannelSplitterNode | null = null;
 
-  // Sample buffers written by the analyser nodes (or by update())
-  private bufferL: Float32Array<ArrayBuffer>;
-  private bufferR: Float32Array<ArrayBuffer>;
+  // Current L/R amplitude levels (0–1) read from MVRP or set via update()
+  private levelL: number = 0;
+  private levelR: number = 0;
 
   // requestAnimationFrame handle
   private animFrameId: number | null = null;
@@ -52,16 +47,10 @@ export class AudioVisualizer {
     this.container = container;
 
     this.opts = {
-      fftSize: options?.fftSize ?? 1024,
       backgroundColor: options?.backgroundColor ?? 'rgba(0,0,0,0.45)',
       colorLeft: options?.colorLeft ?? '#00eaff',
       colorRight: options?.colorRight ?? '#ff00cc',
     };
-
-    // Pre-allocate sample buffers (half of fftSize = time-domain buffer length)
-    const bufLen = this.opts.fftSize / 2;
-    this.bufferL = new Float32Array(bufLen) as Float32Array<ArrayBuffer>;
-    this.bufferR = new Float32Array(bufLen) as Float32Array<ArrayBuffer>;
 
     // Create and configure canvas
     this.canvas = document.createElement('canvas');
@@ -75,7 +64,7 @@ export class AudioVisualizer {
     if (!ctx) throw new Error('[AudioVisualizer] Canvas 2D context unavailable');
     this.ctx2d = ctx;
 
-    // Draw an idle waveform so the canvas is not blank before audio starts
+    // Draw an idle state so the canvas is not blank before audio starts
     this.drawFrame();
   }
 
@@ -84,93 +73,47 @@ export class AudioVisualizer {
   /**
    * Wire the visualizer into the live audio stream managed by `audioManager`.
    *
-   * Taps the MVRP audio output through a ChannelSplitterNode so that L and R
-   * channels are analysed independently.  The tap is inserted via the
-   * ProximityAudioManager's tap GainNode, which sits between MVRP's decoded
-   * audio output and `AudioContext.destination`.
+   * Reads audio levels directly from MVRP's `m_Output.asLevel` array each
+   * animation frame, which contains the actual decoded audio amplitude data
+   * at the output stage.  No Web Audio nodes are created or connected.
    * Starts the requestAnimationFrame draw loop automatically.
    *
    * Idempotent: subsequent calls have no effect while a source is already
    * attached.
    */
   attachAudioSource(audioManager: ProximityAudioManager): void {
-    if (this.audioContext) return; // already attached
+    if (this.audioManager) return; // already attached
 
-    const ctx = audioManager.getAudioContext();
-    if (!ctx) {
-      console.warn('[AudioVisualizer] AudioContext not ready; will retry via update()');
+    const proximity = audioManager.getProximity();
+    if (!proximity) {
+      console.warn('[AudioVisualizer] Proximity not ready; call after ProximityAudioManager.start()');
       return;
     }
 
-    this.audioContext = ctx;
     this.audioManager = audioManager;
-
-    // Create per-channel analysers
-    this.analyserL = ctx.createAnalyser();
-    this.analyserR = ctx.createAnalyser();
-    this.analyserL.fftSize = this.opts.fftSize;
-    this.analyserR.fftSize = this.opts.fftSize;
-
-    // Reallocate sample buffers to match the actual analyser buffer length
-    this.bufferL = new Float32Array(this.analyserL.frequencyBinCount) as Float32Array<ArrayBuffer>;
-    this.bufferR = new Float32Array(this.analyserR.frequencyBinCount) as Float32Array<ArrayBuffer>;
-
-    // Split the stereo output of the gain node into individual channels
-    this.splitter = ctx.createChannelSplitter(2);
-    this.splitter.connect(this.analyserL, 0);
-    this.splitter.connect(this.analyserR, 1);
-
-    // Tap the MVRP output (parallel connection – doesn't affect playback)
-    audioManager.connectAudioTap(this.splitter);
-
     this.startLoop();
     console.log('[AudioVisualizer] Attached to audio source; visualizer active');
   }
 
   /**
-   * Push decoded L/R channel data directly into the visualizer.
+   * Push normalised L/R amplitude values directly into the visualizer.
    *
-   * Useful for testing or when the Web Audio AnalyserNode is not available.
-   * Copies a slice of up to `bufferL.length` samples from each input array.
+   * Useful for testing.  Values should be in the range 0–1.
+   * Redraws immediately so callers can drive the refresh rate externally.
    */
-  update(leftChannelData: Float32Array, rightChannelData: Float32Array): void {
-    const len = Math.min(leftChannelData.length, this.bufferL.length);
-    this.bufferL.set(leftChannelData.subarray(0, len));
-
-    const lenR = Math.min(rightChannelData.length, this.bufferR.length);
-    this.bufferR.set(rightChannelData.subarray(0, lenR));
-
-    // Draw immediately so callers can drive the refresh rate externally
+  update(levelL: number, levelR: number): void {
+    this.levelL = Math.max(0, Math.min(1, levelL));
+    this.levelR = Math.max(0, Math.min(1, levelR));
     this.drawFrame();
   }
 
   /**
-   * Stop the animation loop, disconnect analysis nodes, and remove the canvas
-   * from the DOM.  The instance must not be used after calling dispose().
+   * Stop the animation loop and remove the canvas from the DOM.
+   * The instance must not be used after calling dispose().
    */
   dispose(): void {
     this.stopLoop();
-
-    if (this.splitter) {
-      this.audioManager?.disconnectAudioTap(this.splitter);
-      try {
-        this.splitter.disconnect();
-      } catch { /* already disconnected */ }
-      this.splitter = null;
-    }
-
     this.audioManager = null;
-
-    if (this.analyserL) {
-      try { this.analyserL.disconnect(); } catch { /* ignore */ }
-      this.analyserL = null;
-    }
-    if (this.analyserR) {
-      try { this.analyserR.disconnect(); } catch { /* ignore */ }
-      this.analyserR = null;
-    }
-
-    this.audioContext = null;
 
     if (this.canvas.parentNode) {
       this.canvas.parentNode.removeChild(this.canvas);
@@ -185,9 +128,18 @@ export class AudioVisualizer {
     if (this.animFrameId !== null) return;
     const tick = () => {
       this.animFrameId = requestAnimationFrame(tick);
-      // Pull latest time-domain data from analyser nodes
-      if (this.analyserL) this.analyserL.getFloatTimeDomainData(this.bufferL);
-      if (this.analyserR) this.analyserR.getFloatTimeDomainData(this.bufferR);
+      // Read audio levels directly from MVRP's output stage
+      const proximity = this.audioManager?.getProximity();
+      if (proximity) {
+        const mvrpAudio = proximity.GetAudio();
+        const asLevel = mvrpAudio?.m_Output?.asLevel;
+        if (asLevel) {
+          // asLevel contains signed int16 amplitudes; 32768 is the max positive
+          // value for a signed 16-bit integer, so dividing normalises to 0–1.
+          this.levelL = this.normalizeLevel(asLevel[0] ?? 0);
+          this.levelR = this.normalizeLevel(asLevel[1] ?? 0);
+        }
+      }
       this.drawFrame();
     };
     this.animFrameId = requestAnimationFrame(tick);
@@ -202,6 +154,15 @@ export class AudioVisualizer {
 
   // ─── Rendering ──────────────────────────────────────────────────────────────
 
+  /**
+   * Normalise a signed int16 amplitude value to the range 0–1.
+   *
+   * @param value  Raw signed int16 amplitude from `m_Output.asLevel`.
+   */
+  private normalizeLevel(value: number): number {
+    return Math.min(Math.abs(value) / 32768, 1);
+  }
+
   private drawFrame(): void {
     const { width, height } = this.canvas;
     const c = this.ctx2d;
@@ -210,10 +171,6 @@ export class AudioVisualizer {
     c.fillStyle = this.opts.backgroundColor;
     c.fillRect(0, 0, width, height);
 
-    // Compute RMS amplitude for each channel
-    const ampL = this.calculateRMS(this.bufferL);
-    const ampR = this.calculateRMS(this.bufferR);
-
     // Two equal-width bars with padding on the sides and a gap between
     const padX = Math.round(width * 0.1);
     const gap  = Math.round(width * 0.08);
@@ -221,8 +178,8 @@ export class AudioVisualizer {
     const padY = Math.round(height * 0.05);
     const barAreaH = height - padY * 2;
 
-    this.drawAmplitudeBar(ampL, padX,            padY, barW, barAreaH, this.opts.colorLeft);
-    this.drawAmplitudeBar(ampR, padX + barW + gap, padY, barW, barAreaH, this.opts.colorRight);
+    this.drawAmplitudeBar(this.levelL, padX,              padY, barW, barAreaH, this.opts.colorLeft);
+    this.drawAmplitudeBar(this.levelR, padX + barW + gap, padY, barW, barAreaH, this.opts.colorRight);
   }
 
   /**
@@ -258,34 +215,5 @@ export class AudioVisualizer {
       c.fillStyle = grad;
       c.fillRect(x, y + barAreaH - fillH, barW, fillH);
     }
-  }
-
-  // ─── Amplitude helpers ───────────────────────────────────────────────────────
-
-  /**
-   * Calculate RMS (Root Mean Square) amplitude of a sample buffer.
-   * Returns a value in the range 0–1.
-   */
-  private calculateRMS(data: Float32Array): number {
-    if (data.length === 0) return 0;
-    let sum = 0;
-    for (let i = 0; i < data.length; i++) {
-      sum += data[i] * data[i];
-    }
-    return Math.sqrt(sum / data.length);
-  }
-
-  /**
-   * Calculate peak (maximum absolute) amplitude of a sample buffer.
-   * Returns a value in the range 0–1.
-   * Available as an alternative to RMS for peak-hold meters.
-   */
-  private calculatePeak(data: Float32Array): number {
-    let peak = 0;
-    for (let i = 0; i < data.length; i++) {
-      const abs = Math.abs(data[i]);
-      if (abs > peak) peak = abs;
-    }
-    return peak;
   }
 }
