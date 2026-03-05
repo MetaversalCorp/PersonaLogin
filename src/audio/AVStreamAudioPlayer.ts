@@ -94,6 +94,33 @@ export class AVStreamAudioPlayer {
     return this.gainNode.gain.value;
   }
 
+  // ─── Analysis tap ─────────────────────────────────────────────────────────
+
+  /**
+   * Connect an additional output node (e.g. an AnalyserNode or
+   * ChannelSplitterNode) to the gain node for monitoring purposes.
+   *
+   * The tap runs in parallel with the existing gain → panner → destination
+   * chain and does not affect playback.
+   *
+   * @param destination  The Web Audio node to receive the tapped signal.
+   */
+  connectTap(destination: AudioNode): void {
+    if (!this._connected) return;
+    this.gainNode.connect(destination);
+  }
+
+  /**
+   * Remove a previously connected tap node.
+   *
+   * @param destination  The node originally passed to `connectTap()`.
+   */
+  disconnectTap(destination: AudioNode): void {
+    try {
+      this.gainNode.disconnect(destination);
+    } catch { /* ignore: node may already be disconnected */ }
+  }
+
   // ─── Lifecycle ────────────────────────────────────────────────────────────
 
   /**
