@@ -75,6 +75,11 @@ export class PersonaSession extends Session {
     return this._personaInfo;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  get pLnGClient(): any {
+    return this.pLnG;
+  }
+
   get pRPersona(): unknown {
     return this._pRPersona;
   }
