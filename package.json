@@ -15,12 +15,6 @@
   "license": "UNLICENSED",
   "private": true,
   "devDependencies": {
-    "@metaversalcorp/mvio": "^0.23.7",
-    "@metaversalcorp/mvmf": "^0.23.30",
-    "@metaversalcorp/mvrp": "^0.23.24",
-    "@metaversalcorp/mvrp_fabric": "^0.23.2",
-    "@metaversalcorp/mvrp_map": "^0.23.11",
-    "@metaversalcorp/mvxp": "^0.23.1",
     "esbuild": "^0.25.0",
     "typescript": "^5.3.2"
   },

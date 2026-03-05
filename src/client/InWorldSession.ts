@@ -55,7 +55,7 @@ export class InWorldSession extends Session {
       const updatePayload = {
         tmStamp,
         pState: {
-          bControl: true,
+          bControl: 0,
           bVolume: 0,
           wFlag: 0,
           bSerial_A: 0,
@@ -65,7 +65,7 @@ export class InWorldSession extends Session {
           pPosition_Head: {
             pParent: {
               twObjectIx: Number(celestialId),
-              wClass: 0,
+              wClass: 71, // MapModelType.Celestial
             },
             pRelative: {
               vPosition: {
@@ -76,19 +76,19 @@ export class InWorldSession extends Session {
             },
           },
           pRotation_Head: {
-            dwV: pRPersona.Quat_Encode([0, 0, 0, 1]),
+            dwV: pRPersona.Quat_Encode([0.7071068, 0, 0, 0.7071068]),
           },
           pRotation_Body: {
-            dwV: pRPersona.Quat_Encode([0, 0, 0, 1]),
+            dwV: pRPersona.Quat_Encode([0.7071068, 0, 0, 0.7071068]),
           },
           pPosition_Hand_Left: {
-            dwV: pRPersona.Vect_Encode([0, 0, 0]),
+            dwV: pRPersona.Vect_Encode([-0.2, -0.6, -0.1]),
           },
           pRotation_Hand_Left: {
             dwV: pRPersona.Quat_Encode([0, 0, 0, 1]),
           },
           pPosition_Hand_Right: {
-            dwV: pRPersona.Vect_Encode([0, 0, 0]),
+            dwV: pRPersona.Vect_Encode([0.2, -0.6, -0.1]),
           },
           pRotation_Hand_Right: {
             dwV: pRPersona.Quat_Encode([0, 0, 0, 1]),
