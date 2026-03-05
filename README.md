@@ -17,6 +17,7 @@ npm install
 npm run build
 npm run dev
 ```
+Register for free account at [rp1.com](https://my.rp1.com/signup)
 then open (http://localhost:8090) in web browser
 
 ---
