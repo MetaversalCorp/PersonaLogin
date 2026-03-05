@@ -104,6 +104,19 @@ export class ProximityAudioManager {
         this.tapNode = ctx.createGain();
         this.tapNode.connect(ctx.destination);
 
+        // MVRP's Start() connects its internal ScriptProcessorNode
+        // (m_pNode_Processor) directly to ctx.destination.  Re-route it
+        // through tapNode so that analysis nodes receive the live signal:
+        //   m_pNode_Processor → tapNode → ctx.destination
+        const processorNode = mvAudio.m_pNode_Processor;
+        if (processorNode) {
+          try { processorNode.disconnect(ctx.destination); } catch { /* already disconnected */ }
+          processorNode.connect(this.tapNode);
+          console.log('[ProximityAudioManager] MVRP processor re-routed through tapNode');
+        } else {
+          console.warn('[ProximityAudioManager] m_pNode_Processor not found; tap may receive no signal');
+        }
+
         console.log('[ProximityAudioManager] AVStreamAudioPlayer ready (sampleRate:', ctx.sampleRate, 'Hz)');
       }
 
