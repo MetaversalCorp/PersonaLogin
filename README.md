@@ -1,4 +1,4 @@
-# PersonaLogin
+# Persona Login (Avatar Stub)
 
 Minimal but fully functional Persona authentication and session management client for RP1.
 
@@ -8,8 +8,16 @@ Minimal but fully functional Persona authentication and session management clien
 - TypeScript with strict type safety
 - Minimal dependencies (esbuild, TypeScript)
 - Development server with hot reload
-- Bootstrap 5 UI
-- Complete transaction logging
+
+## Quickstart
+```
+git clone https://github.com/MetaversalCorp/PersonaLogin.git
+cd PersonaLogin
+npm install
+npm run build
+npm run dev
+```
+then open (http://localhost:8090) in web browser
 
 ---
 
