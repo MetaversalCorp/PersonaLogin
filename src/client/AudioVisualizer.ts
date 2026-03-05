@@ -34,6 +34,7 @@ export class AudioVisualizer {
 
   // Web Audio analysis nodes (created in attachAudioSource)
   private audioContext: AudioContext | null = null;
+  private audioManager: ProximityAudioManager | null = null;
   private analyserL: AnalyserNode | null = null;
   private analyserR: AnalyserNode | null = null;
   private splitter: ChannelSplitterNode | null = null;
@@ -83,8 +84,10 @@ export class AudioVisualizer {
   /**
    * Wire the visualizer into the live audio stream managed by `audioManager`.
    *
-   * Taps the GainNode output of the underlying AVStreamAudioPlayer through a
-   * ChannelSplitterNode so that L and R channels are analysed independently.
+   * Taps the MVRP audio output through a ChannelSplitterNode so that L and R
+   * channels are analysed independently.  The tap is inserted via the
+   * ProximityAudioManager's tap GainNode, which sits between MVRP's decoded
+   * audio output and `AudioContext.destination`.
    * Starts the requestAnimationFrame draw loop automatically.
    *
    * Idempotent: subsequent calls have no effect while a source is already
@@ -93,14 +96,14 @@ export class AudioVisualizer {
   attachAudioSource(audioManager: ProximityAudioManager): void {
     if (this.audioContext) return; // already attached
 
-    const player = audioManager.getAudioPlayer();
-    if (!player) {
-      console.warn('[AudioVisualizer] AVStreamAudioPlayer not ready; will retry via update()');
+    const ctx = audioManager.getAudioContext();
+    if (!ctx) {
+      console.warn('[AudioVisualizer] AudioContext not ready; will retry via update()');
       return;
     }
 
-    const ctx = player.context;
     this.audioContext = ctx;
+    this.audioManager = audioManager;
 
     // Create per-channel analysers
     this.analyserL = ctx.createAnalyser();
@@ -117,8 +120,8 @@ export class AudioVisualizer {
     this.splitter.connect(this.analyserL, 0);
     this.splitter.connect(this.analyserR, 1);
 
-    // Tap the gainNode (parallel connection – doesn't affect playback)
-    player.connectTap(this.splitter);
+    // Tap the MVRP output (parallel connection – doesn't affect playback)
+    audioManager.connectAudioTap(this.splitter);
 
     this.startLoop();
     console.log('[AudioVisualizer] Attached to audio source; visualizer active');
@@ -149,11 +152,14 @@ export class AudioVisualizer {
     this.stopLoop();
 
     if (this.splitter) {
+      this.audioManager?.disconnectAudioTap(this.splitter);
       try {
         this.splitter.disconnect();
       } catch { /* already disconnected */ }
       this.splitter = null;
     }
+
+    this.audioManager = null;
 
     if (this.analyserL) {
       try { this.analyserL.disconnect(); } catch { /* ignore */ }
