@@ -108,6 +108,61 @@ export class AudioVisualizer {
   }
 
   /**
+   * Update the visualizer with raw PCM samples from a decoded audio frame.
+   *
+   * Computes per-channel RMS from the interleaved samples and updates the
+   * amplitude bars accordingly.  The animation loop is started automatically
+   * if it is not already running.
+   *
+   * This method provides a direct PCM path that runs in parallel with the
+   * existing `attachAudioSource` / AnalyserNode path and is the preferred
+   * route for feeding speech-to-text pipelines that already hold a decoded
+   * PCM slice.
+   *
+   * @param samples       Interleaved PCM samples (numeric array-like).
+   * @param channelCount  Channels interleaved in `samples`.  Default: 2.
+   * @param normalize     When `true` the values are treated as signed int16
+   *                      (range −32 768 … +32 767) and divided by 32 768 to
+   *                      produce a 0–1 amplitude.  Set to `false` when samples
+   *                      are already normalised.  Default: `true`.
+   */
+  updateFromPcm(samples: ArrayLike<number>, channelCount = 2, normalize = true): void {
+    if (samples.length === 0) return;
+
+    const scale = normalize ? 32768 : 1;
+    let sumSqL = 0;
+    let sumSqR = 0;
+    const frames = Math.floor(samples.length / channelCount);
+
+    if (channelCount >= 2) {
+      for (let i = 0; i < frames; i++) {
+        const l = (samples[i * 2]     as number) / scale;
+        const r = (samples[i * 2 + 1] as number) / scale;
+        sumSqL += l * l;
+        sumSqR += r * r;
+      }
+      this.levelL = Math.min(Math.sqrt(sumSqL / (frames || 1)), 1);
+      this.levelR = Math.min(Math.sqrt(sumSqR / (frames || 1)), 1);
+    } else {
+      for (let i = 0; i < samples.length; i++) {
+        const v = (samples[i] as number) / scale;
+        sumSqL += v * v;
+      }
+      const rms = Math.min(Math.sqrt(sumSqL / (samples.length || 1)), 1);
+      this.levelL = rms;
+      this.levelR = rms;
+    }
+
+    // Ensure the animation loop is running even when no audio source has been
+    // attached via attachAudioSource().
+    if (this.animFrameId === null) {
+      this.startLoop();
+    } else {
+      this.drawFrame();
+    }
+  }
+
+  /**
    * Stop the animation loop and remove the canvas from the DOM.
    * The instance must not be used after calling dispose().
    */

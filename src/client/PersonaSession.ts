@@ -195,6 +195,11 @@ export class PersonaSession extends Session {
     this.inWorldSession.teleportTo(celestialId, position);
   }
 
+  /** Returns the active InWorldSession, or `null` if not yet in-world. */
+  get inWorld(): InWorldSession | null {
+    return this.inWorldSession;
+  }
+
   async disconnect(): Promise<void> {
     if (this.inWorldSession) {
       await this.inWorldSession.disconnect();

@@ -26,6 +26,13 @@ import { AVStreamAudioPlayer } from './AVStreamAudioPlayer.js';
  *   Callers that need per-source volume or 3-D positioning can obtain the player
  *   via getAudioPlayer() and route decoded buffers through it.
  *
+ * PCM buffer access
+ * ─────────────────
+ *   getAudioBuffer()   – returns the live MVRP `m_Buffer` for direct PCM access
+ *   getAudioMetadata() – returns sampleRate, samplesPerSlice, bytesPerSample
+ *   These are used by AudioFrameCapture to feed decoded samples to a ring buffer
+ *   for speech-to-text or other downstream processing pipelines.
+ *
  * Mute / deaf controls
  * ─────────────────────
  *   muteLocalMic(true)  – suppress microphone transmission to server
@@ -183,6 +190,54 @@ export class ProximityAudioManager {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getProximity(): any {
     return this.proximity;
+  }
+
+  /**
+   * Returns the live `m_Buffer` object from MVRP's internal audio decoder, or
+   * `null` if audio has not been started.
+   *
+   * The returned object is a **live reference** updated in-place by MVRP as
+   * each audio frame is decoded.  Copy data out of it promptly; do not hold
+   * long-lived references to individual sub-fields.
+   *
+   * Buffer structure:
+   * ```
+   *   pArrayBuffer  – raw binary data          (ArrayBuffer | null)
+   *   asSample      – decoded samples (float)  (number[] | null)
+   *   nSize         – buffer capacity           (number)
+   *   nBytes        – bytes currently used      (number)
+   *   nCount        – sample count for slice    (number)
+   *   nLength       – current data length       (number)
+   *   nHead         – read head position        (number)
+   *   nTail         – write tail position       (number)
+   *   nSlice        – slice index, increments per decoded frame (number)
+   * ```
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  getAudioBuffer(): any | null {
+    if (!this.proximity) return null;
+    return this.proximity.GetAudio()?.m_Buffer ?? null;
+  }
+
+  /**
+   * Returns audio stream metadata from MVRP, or `null` if audio has not been
+   * started.
+   *
+   * @returns Object with:
+   *   - `sampleRate`      – sample rate in Hz (typically 48000)
+   *   - `samplesPerSlice` – decoded samples per frame slice (~960)
+   *   - `bytesPerSample`  – bytes per sample (2 for PCM16, 4 for float32)
+   */
+  getAudioMetadata(): { sampleRate: number; samplesPerSlice: number; bytesPerSample: number } | null {
+    if (!this.proximity) return null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const mvrpAudio: any = this.proximity.GetAudio();
+    if (!mvrpAudio) return null;
+    return {
+      sampleRate:      mvrpAudio.m_nSampleRate    ?? 48000,
+      samplesPerSlice: mvrpAudio.m_nSamples_Slice ?? 960,
+      bytesPerSample:  mvrpAudio.m_nBytes_Sample  ?? 2,
+    };
   }
 
   /** Returns `true` if the audio engine is currently active. */

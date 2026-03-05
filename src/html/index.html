@@ -438,6 +438,54 @@
             height: 120px;
          }
       }
+
+      /* ── Speech-to-Text Demo ─────────────────────────────────────────────── */
+
+      .stt-panel {
+         margin-top: 16px;
+         background: rgba(0, 0, 0, 0.55);
+         border-radius: 8px;
+         padding: 16px;
+         color: #e0e0e0;
+      }
+
+      .stt-panel h6 {
+         font-size: 11px;
+         font-weight: 700;
+         text-transform: uppercase;
+         letter-spacing: 0.08em;
+         color: #00eaff;
+         margin-bottom: 10px;
+      }
+
+      .stt-controls {
+         display: flex;
+         gap: 8px;
+         flex-wrap: wrap;
+         margin-bottom: 10px;
+      }
+
+      .stt-controls button {
+         font-size: 11px;
+         padding: 4px 12px;
+      }
+
+      .stt-status {
+         font-size: 11px;
+         opacity: 0.7;
+         margin-bottom: 8px;
+      }
+
+      .stt-status span {
+         font-weight: 600;
+         color: #ff00cc;
+      }
+
+      .stt-buffer-info {
+         font-size: 10px;
+         font-family: 'Courier New', monospace;
+         opacity: 0.65;
+      }
    </style>
 </head>
 
@@ -699,6 +747,22 @@
             </div><!-- /.teleport-panel-inner -->
          </div>
 
+         <!-- Speech-to-Text Demo Panel -->
+         <div class="stt-panel" id="stt-panel" style="display:none;">
+            <h6><i class="fa-solid fa-microphone-lines"></i> Speech-to-Text (Inbound Audio Capture)</h6>
+            <div class="stt-controls">
+               <button class="btn btn-sm btn-outline-info"  id="stt-enable-btn">Enable Capture</button>
+               <button class="btn btn-sm btn-outline-secondary" id="stt-disable-btn" disabled>Disable Capture</button>
+               <button class="btn btn-sm btn-outline-warning" id="stt-clear-btn">Clear Buffer</button>
+            </div>
+            <div class="stt-status">
+               Status: <span id="stt-status-text">Inactive</span>
+            </div>
+            <div class="stt-buffer-info" id="stt-buffer-info">
+               Buffer: — samples available &nbsp;|&nbsp; Sample rate: — Hz &nbsp;|&nbsp; Channels: —
+            </div>
+         </div>
+
          <div class="card bg-light rounded-5">
             <div class="card-header">
                <h5 class="mb-0"><i class="fa-solid fa-database"></i> Persona Session &amp; Puppet Data</h5>
@@ -743,13 +807,94 @@
 
    <script type="module">
       // Import real PersonaLogin classes from app.js (compiled TypeScript)
-      import { LoginClient } from './app.js';
+      import { LoginClient, AudioFrameCapture } from './app.js';
 
       // Initialize the app
       document.addEventListener('DOMContentLoaded', () => {
          const loginClient = new LoginClient(document.body);
          window.loginClient = loginClient;
          console.log('RP1 Demo Login initialized with real PersonaSession and PersonaPuppet');
+
+         // ── Speech-to-Text demo wiring ───────────────────────────────────────
+         let sttCapture = null;
+
+         const sttPanel      = document.getElementById('stt-panel');
+         const sttEnableBtn  = document.getElementById('stt-enable-btn');
+         const sttDisableBtn = document.getElementById('stt-disable-btn');
+         const sttClearBtn   = document.getElementById('stt-clear-btn');
+         const sttStatusEl   = document.getElementById('stt-status-text');
+         const sttInfoEl     = document.getElementById('stt-buffer-info');
+
+         /** Retrieve the active ProximityAudioManager through the session chain. */
+         function getAudioManager() {
+            return loginClient.session?.personaSession?.inWorld?.audio ?? null;
+         }
+
+         /** Update the buffer-info line on every animation frame while enabled. */
+         function updateSttInfo() {
+            if (!sttCapture || !sttCapture.isEnabled) return;
+            const info = sttCapture.buffer.info;
+            if (sttInfoEl) {
+               sttInfoEl.textContent =
+                  `Buffer: ${info.available.toLocaleString()} samples available` +
+                  ` \u00a0|\u00a0 Sample rate: ${info.sampleRate.toLocaleString()} Hz` +
+                  ` \u00a0|\u00a0 Channels: ${info.channelCount}`;
+            }
+            requestAnimationFrame(updateSttInfo);
+         }
+
+         sttEnableBtn?.addEventListener('click', () => {
+            const audioManager = getAudioManager();
+            if (!audioManager) {
+               alert('Audio manager not available yet. Enter the world first.');
+               return;
+            }
+
+            if (!sttCapture) {
+               const meta = audioManager.getAudioMetadata();
+               sttCapture = new AudioFrameCapture(audioManager, {
+                  sampleRate:   meta?.sampleRate   ?? 48000,
+                  channelCount: 2,
+               });
+            }
+
+            sttCapture.enable();
+            if (sttStatusEl) sttStatusEl.textContent = 'Active';
+            if (sttEnableBtn)  sttEnableBtn.disabled  = true;
+            if (sttDisableBtn) sttDisableBtn.disabled = false;
+            requestAnimationFrame(updateSttInfo);
+         });
+
+         sttDisableBtn?.addEventListener('click', () => {
+            sttCapture?.disable();
+            if (sttStatusEl)  sttStatusEl.textContent  = 'Inactive';
+            if (sttEnableBtn)  sttEnableBtn.disabled  = false;
+            if (sttDisableBtn) sttDisableBtn.disabled = true;
+         });
+
+         sttClearBtn?.addEventListener('click', () => {
+            sttCapture?.clearBuffer();
+            if (sttInfoEl) {
+               const info = sttCapture?.buffer?.info;
+               if (info) {
+                  sttInfoEl.textContent =
+                     `Buffer: 0 samples available` +
+                     ` \u00a0|\u00a0 Sample rate: ${info.sampleRate.toLocaleString()} Hz` +
+                     ` \u00a0|\u00a0 Channels: ${info.channelCount}`;
+               }
+            }
+         });
+
+         // Show the STT panel once a session-section becomes visible.
+         // We watch for the class change on the session-section element.
+         const sessionSection = document.getElementById('session-section');
+         if (sessionSection && sttPanel) {
+            const observer = new MutationObserver(() => {
+               const visible = !sessionSection.classList.contains('d-none');
+               sttPanel.style.display = visible ? 'block' : 'none';
+            });
+            observer.observe(sessionSection, { attributes: true, attributeFilter: ['class'] });
+         }
       });
    </script>
 
