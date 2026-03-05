@@ -13,7 +13,7 @@ export interface VisualizerOptions {
 }
 
 /**
- * AudioVisualizer – renders a real-time dual-channel (L/R) audio waveform on
+ * AudioVisualizer – renders real-time dual-channel (L/R) amplitude meters on
  * an HTML5 canvas element placed inside the supplied container.
  *
  * Lifecycle
@@ -66,7 +66,7 @@ export class AudioVisualizer {
     this.canvas = document.createElement('canvas');
     this.canvas.className = 'audio-visualizer-canvas';
     // Intrinsic resolution; CSS controls display size
-    this.canvas.width  = 120;
+    this.canvas.width  = 280;
     this.canvas.height = 240;
     container.appendChild(this.canvas);
 
@@ -84,7 +84,7 @@ export class AudioVisualizer {
    * Wire the visualizer into the live audio stream managed by `audioManager`.
    *
    * Taps the GainNode output of the underlying AVStreamAudioPlayer through a
-   * ChannelSplitterNode so that L and R waveforms are analysed independently.
+   * ChannelSplitterNode so that L and R channels are analysed independently.
    * Starts the requestAnimationFrame draw loop automatically.
    *
    * Idempotent: subsequent calls have no effect while a source is already
@@ -204,63 +204,82 @@ export class AudioVisualizer {
     c.fillStyle = this.opts.backgroundColor;
     c.fillRect(0, 0, width, height);
 
-    // Each channel gets half the vertical height
-    const channelH = height / 2;
-    const gap = 1; // 1 px separator between channels
+    // Compute RMS amplitude for each channel
+    const ampL = this.calculateRMS(this.bufferL);
+    const ampR = this.calculateRMS(this.bufferR);
 
-    this.drawChannel(this.bufferL, 0,           channelH - gap, this.opts.colorLeft,  'L');
-    this.drawChannel(this.bufferR, channelH + gap, channelH - gap, this.opts.colorRight, 'R');
+    // Two equal-width bars with padding on the sides and a gap between
+    const padX = Math.round(width * 0.1);
+    const gap  = Math.round(width * 0.08);
+    const barW = Math.round((width - padX * 2 - gap) / 2);
+    const padY = Math.round(height * 0.05);
+    const barAreaH = height - padY * 2;
+
+    this.drawAmplitudeBar(ampL, padX,            padY, barW, barAreaH, this.opts.colorLeft);
+    this.drawAmplitudeBar(ampR, padX + barW + gap, padY, barW, barAreaH, this.opts.colorRight);
   }
 
   /**
-   * Render a single waveform channel into a horizontal band of the canvas.
+   * Render a single vertical amplitude bar.
    *
-   * @param data    Time-domain samples in the range ±1.0.
-   * @param yStart  Top pixel of the band (canvas-space).
-   * @param bandH   Height of the band in pixels.
-   * @param color   Stroke colour.
-   * @param label   Single-character channel label ('L' or 'R').
+   * @param amplitude  Normalised amplitude in the range 0–1.
+   * @param x          Left edge of the bar (canvas-space).
+   * @param y          Top edge of the bar area (canvas-space).
+   * @param barW       Width of the bar in pixels.
+   * @param barAreaH   Total height of the bar area in pixels.
+   * @param color      Fill colour for the bar.
    */
-  private drawChannel(
-    data: Float32Array,
-    yStart: number,
-    bandH: number,
+  private drawAmplitudeBar(
+    amplitude: number,
+    x: number,
+    y: number,
+    barW: number,
+    barAreaH: number,
     color: string,
-    label: string,
   ): void {
-    const { width } = this.canvas;
     const c = this.ctx2d;
-    const midY = yStart + bandH / 2;
 
-    // Zero-reference line
-    c.beginPath();
-    c.strokeStyle = 'rgba(255,255,255,0.15)';
-    c.lineWidth = 1;
-    c.moveTo(0, midY);
-    c.lineTo(width, midY);
-    c.stroke();
+    // Dim background track
+    c.fillStyle = 'rgba(255,255,255,0.05)';
+    c.fillRect(x, y, barW, barAreaH);
 
-    // Waveform
-    c.beginPath();
-    c.strokeStyle = color;
-    c.lineWidth = 1.5;
-    c.lineJoin = 'round';
-
-    const sliceW = width / data.length;
-    for (let i = 0; i < data.length; i++) {
-      const x = i * sliceW;
-      const y = midY - data[i] * (bandH / 2 - 2);
-      if (i === 0) {
-        c.moveTo(x, y);
-      } else {
-        c.lineTo(x, y);
-      }
+    const fillH = Math.round(Math.min(amplitude, 1) * barAreaH);
+    if (fillH > 0) {
+      // Gradient from base colour at the bottom to near-white at the top
+      const grad = c.createLinearGradient(0, y + barAreaH, 0, y);
+      grad.addColorStop(0, color);
+      grad.addColorStop(1, 'rgba(255,255,255,0.85)');
+      c.fillStyle = grad;
+      c.fillRect(x, y + barAreaH - fillH, barW, fillH);
     }
-    c.stroke();
+  }
 
-    // Channel label
-    c.fillStyle = color;
-    c.font = 'bold 9px monospace';
-    c.fillText(label, 3, yStart + 10);
+  // ─── Amplitude helpers ───────────────────────────────────────────────────────
+
+  /**
+   * Calculate RMS (Root Mean Square) amplitude of a sample buffer.
+   * Returns a value in the range 0–1.
+   */
+  private calculateRMS(data: Float32Array): number {
+    if (data.length === 0) return 0;
+    let sum = 0;
+    for (let i = 0; i < data.length; i++) {
+      sum += data[i] * data[i];
+    }
+    return Math.sqrt(sum / data.length);
+  }
+
+  /**
+   * Calculate peak (maximum absolute) amplitude of a sample buffer.
+   * Returns a value in the range 0–1.
+   * Available as an alternative to RMS for peak-hold meters.
+   */
+  private calculatePeak(data: Float32Array): number {
+    let peak = 0;
+    for (let i = 0; i < data.length; i++) {
+      const abs = Math.abs(data[i]);
+      if (abs > peak) peak = abs;
+    }
+    return peak;
   }
 }
