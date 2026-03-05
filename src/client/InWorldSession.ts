@@ -2,15 +2,18 @@ import { Session } from "../base/Session.js";
 import { ConnectionState, PersonaInfo } from "../types/index.js";
 import { PersonaPuppet } from "../avatar/PersonaPuppet.js";
 import type { PersonaSession } from "../client/PersonaSession.js";
+import { ProximityAudioManager } from "../audio/ProximityAudioManager.js";
 
 /**
  * InWorldSession - integrates the active persona with the RP1 world environment.
- * Manages the PersonaPuppet avatar and world-level event handling.
+ * Manages the PersonaPuppet avatar, world-level event handling, and proximity
+ * audio playback via ProximityAudioManager.
  */
 export class InWorldSession extends Session {
   private personaInfo: PersonaInfo;
   private puppet: PersonaPuppet | null = null;
   readonly personaSession: PersonaSession;
+  private audioManager: ProximityAudioManager | null = null;
 
   constructor(personaInfo: PersonaInfo, personaSession: PersonaSession) {
     super();
@@ -22,16 +25,36 @@ export class InWorldSession extends Session {
     return this.puppet;
   }
 
+  /** Returns the active ProximityAudioManager, or null before connect(). */
+  get audio(): ProximityAudioManager | null {
+    return this.audioManager;
+  }
+
   async connect(): Promise<void> {
     this.setState(ConnectionState.EnteringWorld);
 
     this.puppet = new PersonaPuppet(this.personaInfo, this);
     await this.puppet.spawn();
 
+    // Start proximity audio: receives encoded audio from the server and plays
+    // it back through the local Web Audio API (AudioContext).
+    const pLnG = this.personaSession.pLnGClient;
+    if (pLnG) {
+      this.audioManager = new ProximityAudioManager(pLnG);
+      this.audioManager.start();
+    } else {
+      console.warn('[InWorldSession] pLnGClient unavailable; proximity audio disabled');
+    }
+
     this.setState(ConnectionState.InWorld);
   }
 
   async disconnect(): Promise<void> {
+    if (this.audioManager) {
+      this.audioManager.stop();
+      this.audioManager = null;
+    }
+
     if (this.puppet) {
       await this.puppet.despawn();
       this.puppet = null;
