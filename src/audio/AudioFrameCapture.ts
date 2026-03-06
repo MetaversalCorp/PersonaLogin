@@ -58,7 +58,7 @@ export class AudioFrameCapture {
   private _enabled: boolean = false;
   private pollHandle: ReturnType<typeof requestAnimationFrame> | null = null;
 
-  /** AnalyserNode connected directly to AudioContext.destination to capture MVRP output. */
+  /** AnalyserNode connected as a second listener to AudioContext.destination to passively monitor MVRP output. */
   private analyserNode: AnalyserNode | null = null;
   /** Scratch buffer for `getFloatTimeDomainData` – sized to `analyserNode.fftSize`. */
   private analyserBuffer: Float32Array | null = null;
@@ -86,8 +86,10 @@ export class AudioFrameCapture {
    * Start capturing decoded audio frames.
    * Idempotent: calling while already enabled has no effect.
    *
-   * Connects an AnalyserNode directly to AudioContext.destination to capture
-   * the live decoded PCM stream from MVRP.
+   * Connects an AnalyserNode as a second listener to AudioContext.destination
+   * to passively monitor the spatial audio output from MVRP (which is mixed
+   * based on avatar positions). The AnalyserNode does not interfere with
+   * playback—it simply reads the audio flowing to the speakers.
    */
   enable(): void {
     if (this._enabled) return;
@@ -101,8 +103,7 @@ export class AudioFrameCapture {
       this.analyserNode.fftSize = 2048;
       this.analyserBuffer = new Float32Array(this.analyserNode.fftSize);
 
-      // Connect AnalyserNode directly to destination where MVRP outputs audio
-      // (NOT to AVStreamAudioPlayer - that only handles user-scheduled buffers)
+      // Connect as second listener to destination (passive monitoring)
       this.analyserNode.connect(ctx.destination);
     }
 
@@ -127,7 +128,7 @@ export class AudioFrameCapture {
     }
 
     if (this.analyserNode) {
-      // Disconnect from destination (not from player)
+      // Disconnect from destination
       this.analyserNode.disconnect();
       this.analyserNode = null;
       this.analyserBuffer = null;
