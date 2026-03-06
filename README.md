@@ -128,9 +128,9 @@ LoginClient  (entry point — UI wiring + auth flow)
 
 ## 3. `Send("UPDATE", …)` Payload Structure
 
-The `UPDATE` message is sent via `pRPersona.Send('UPDATE', payload)` to synchronise the avatar's position, rotation, and audio state with the RP1 server. It is used both during active avatar sessions (ongoing position updates from `PersonaPuppet.sendUpdate()`) and during teleportation (one-shot repositioning from `InWorldSession.teleportTo()`).
+The `UPDATE` message is sent via `pRPersona.Send('UPDATE', payload)` to synchronise the avatar's position, rotation, and audio state with the RP1 server. It is used both during active "Avatar Send" phases and during teleportation (one-shot repositioning) from `InWorldSession.teleportTo()`).
 
-> **Reference implementation:** See `RP1Demo` — `InWorldSession.teleportTo()` and `PersonaPuppet.sendUpdate()`.
+> **Reference implementation:** See `RP1Demo` — `InWorldSession.teleportTo()`.
 
 ### Full Payload TypeScript Interface
 
