@@ -73,10 +73,10 @@ export class PersonaSession extends Session {
   private _onAvatarUpdate: (() => void) | null = null;
 
   /** Timestamp of the last avatar update send; used to throttle MVRP ticks to ~64 Hz. */
-  private _lastAvatarUpdateTime = 0;
+  private lastAvatarUpdateTick: number = 0;
 
   /** Minimum interval (ms) between avatar updates (~64 Hz, matching RP1 demo update rate). */
-  private static readonly AVATAR_UPDATE_INTERVAL_MS = 16;
+  private avatarUpdateIntervalMs: number = 15.625;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   constructor(personaId: string, pLnG: any, pRUser: any, firstName?: string, lastName?: string) {
@@ -228,8 +228,8 @@ export class PersonaSession extends Session {
   public onNotice(): void {
     if (!this._avatarUpdateActive || !this._onAvatarUpdate) return;
     const now = Date.now();
-    if (now - this._lastAvatarUpdateTime < PersonaSession.AVATAR_UPDATE_INTERVAL_MS) return;
-    this._lastAvatarUpdateTime = now;
+    if (now - this.lastAvatarUpdateTick < this.avatarUpdateIntervalMs) return;
+    this.lastAvatarUpdateTick = now;
     this.avatarUpdatePending = true;
     try {
       this._onAvatarUpdate();
@@ -247,7 +247,7 @@ export class PersonaSession extends Session {
   public startAvatarUpdates(callback: () => void): void {
     this._onAvatarUpdate = callback;
     this._avatarUpdateActive = true;
-    this._lastAvatarUpdateTime = 0;
+    this.lastAvatarUpdateTick = 0;
     this.avatarUpdatePending = false;
     console.log('[PersonaSession] Avatar updates started (MVRP-driven)');
   }
@@ -267,7 +267,7 @@ export class PersonaSession extends Session {
    */
   public triggerAvatarUpdate(): void {
     if (!this._avatarUpdateActive) return;
-    this._lastAvatarUpdateTime = 0; // Reset timer so next onNotice() fires immediately
+    this.lastAvatarUpdateTick = 0; // Reset timer so next onNotice() fires immediately
     this.avatarUpdatePending = true;
   }
 
