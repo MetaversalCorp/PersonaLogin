@@ -442,11 +442,12 @@
       /* ── Speech-to-Text Demo ─────────────────────────────────────────────── */
 
       .stt-panel {
-         margin-top: 16px;
+         margin-top: 8px;
          background: rgba(0, 0, 0, 0.55);
          border-radius: 8px;
          padding: 16px;
          color: #e0e0e0;
+         width: 100%;
       }
 
       .stt-panel h6 {
@@ -485,6 +486,31 @@
          font-size: 10px;
          font-family: 'Courier New', monospace;
          opacity: 0.65;
+      }
+
+      .stt-frame-info {
+         font-size: 10px;
+         font-family: 'Courier New', monospace;
+         opacity: 0.75;
+         margin-top: 4px;
+         display: flex;
+         align-items: center;
+         gap: 4px;
+      }
+
+      .stt-live-dot {
+         display: inline-block;
+         width: 7px;
+         height: 7px;
+         border-radius: 50%;
+         background: #ff4444;
+         animation: stt-pulse 1s ease-in-out infinite;
+         flex-shrink: 0;
+      }
+
+      @keyframes stt-pulse {
+         0%, 100% { opacity: 1; transform: scale(1); }
+         50%       { opacity: 0.3; transform: scale(0.75); }
       }
    </style>
 </head>
@@ -738,29 +764,32 @@
 
                </div><!-- /.teleport-controls-col -->
 
-               <!-- Right column: audio waveform visualizer -->
+               <!-- Right column: audio waveform visualizer + capture controls -->
                <div class="audio-visualizer-col">
                   <div class="visualizer-title">Inbound Audio</div>
                   <div class="audio-visualizer-container" id="audio-visualizer-container"></div>
+
+                  <!-- Inbound Audio Capture controls -->
+                  <div class="stt-panel" id="stt-panel" style="display:none;">
+                     <h6><i class="fa-solid fa-wave-square"></i> Inbound Audio Capture</h6>
+                     <div class="stt-controls">
+                        <button class="btn btn-sm btn-outline-info"  id="stt-enable-btn">Enable Capture</button>
+                        <button class="btn btn-sm btn-outline-secondary" id="stt-disable-btn" disabled>Disable Capture</button>
+                        <button class="btn btn-sm btn-outline-warning" id="stt-clear-btn">Clear Buffer</button>
+                     </div>
+                     <div class="stt-status">
+                        Status: <span id="stt-status-text">Inactive</span>
+                     </div>
+                     <div class="stt-buffer-info" id="stt-buffer-info">
+                        Buffer: — samples &nbsp;|&nbsp; Sample rate: — Hz &nbsp;|&nbsp; Channels: —
+                     </div>
+                     <div class="stt-frame-info" id="stt-frame-info" style="display:none;">
+                        <span class="stt-live-dot"></span>Updates: <span id="stt-frame-count">0</span> &nbsp;|&nbsp; <span id="stt-fps">0.0</span> fps
+                     </div>
+                  </div><!-- /.stt-panel -->
                </div><!-- /.audio-visualizer-col -->
 
             </div><!-- /.teleport-panel-inner -->
-         </div>
-
-         <!-- Speech-to-Text Demo Panel -->
-         <div class="stt-panel" id="stt-panel" style="display:none;">
-            <h6><i class="fa-solid fa-microphone-lines"></i> Speech-to-Text (Inbound Audio Capture)</h6>
-            <div class="stt-controls">
-               <button class="btn btn-sm btn-outline-info"  id="stt-enable-btn">Enable Capture</button>
-               <button class="btn btn-sm btn-outline-secondary" id="stt-disable-btn" disabled>Disable Capture</button>
-               <button class="btn btn-sm btn-outline-warning" id="stt-clear-btn">Clear Buffer</button>
-            </div>
-            <div class="stt-status">
-               Status: <span id="stt-status-text">Inactive</span>
-            </div>
-            <div class="stt-buffer-info" id="stt-buffer-info">
-               Buffer: — samples available &nbsp;|&nbsp; Sample rate: — Hz &nbsp;|&nbsp; Channels: —
-            </div>
          </div>
 
          <div class="card bg-light rounded-5">
@@ -824,6 +853,13 @@
          const sttClearBtn   = document.getElementById('stt-clear-btn');
          const sttStatusEl   = document.getElementById('stt-status-text');
          const sttInfoEl     = document.getElementById('stt-buffer-info');
+         const sttFrameInfoEl   = document.getElementById('stt-frame-info');
+         const sttFrameCountEl  = document.getElementById('stt-frame-count');
+         const sttFpsEl         = document.getElementById('stt-fps');
+
+         let sttFrameCount = 0;
+         let sttFpsCounter = 0;
+         let sttLastFpsTime = 0;
 
          /** Retrieve the active ProximityAudioManager through the session chain. */
          function getAudioManager() {
@@ -831,15 +867,35 @@
          }
 
          /** Update the buffer-info line on every animation frame while enabled. */
-         function updateSttInfo() {
+         function updateSttInfo(timestamp) {
             if (!sttCapture || !sttCapture.isEnabled) return;
             const info = sttCapture.buffer.info;
+
+            sttFrameCount++;
+            sttFpsCounter++;
+
             if (sttInfoEl) {
                sttInfoEl.textContent =
-                  `Buffer: ${info.available.toLocaleString()} samples available` +
+                  `Buffer: ${info.available.toLocaleString()} samples` +
                   ` \u00a0|\u00a0 Sample rate: ${info.sampleRate.toLocaleString()} Hz` +
                   ` \u00a0|\u00a0 Channels: ${info.channelCount}`;
             }
+
+            if (sttFrameInfoEl) {
+               sttFrameInfoEl.style.display = 'flex';
+               if (sttFrameCountEl) sttFrameCountEl.textContent = sttFrameCount.toLocaleString();
+
+               // Recalculate FPS once per second
+               if (sttLastFpsTime === 0) sttLastFpsTime = timestamp;
+               const elapsed = timestamp - sttLastFpsTime;
+               if (elapsed >= 1000) {
+                  const fps = (sttFpsCounter / elapsed * 1000).toFixed(1);
+                  if (sttFpsEl) sttFpsEl.textContent = fps;
+                  sttFpsCounter = 0;
+                  sttLastFpsTime = timestamp;
+               }
+            }
+
             requestAnimationFrame(updateSttInfo);
          }
 
@@ -859,6 +915,9 @@
             }
 
             sttCapture.enable();
+            sttFrameCount = 0;
+            sttFpsCounter = 0;
+            sttLastFpsTime = 0;
             if (sttStatusEl) sttStatusEl.textContent = 'Active';
             if (sttEnableBtn)  sttEnableBtn.disabled  = true;
             if (sttDisableBtn) sttDisableBtn.disabled = false;
@@ -870,6 +929,7 @@
             if (sttStatusEl)  sttStatusEl.textContent  = 'Inactive';
             if (sttEnableBtn)  sttEnableBtn.disabled  = false;
             if (sttDisableBtn) sttDisableBtn.disabled = true;
+            if (sttFrameInfoEl) sttFrameInfoEl.style.display = 'none';
          });
 
          sttClearBtn?.addEventListener('click', () => {
@@ -878,7 +938,7 @@
                const info = sttCapture?.buffer?.info;
                if (info) {
                   sttInfoEl.textContent =
-                     `Buffer: 0 samples available` +
+                     `Buffer: 0 samples` +
                      ` \u00a0|\u00a0 Sample rate: ${info.sampleRate.toLocaleString()} Hz` +
                      ` \u00a0|\u00a0 Channels: ${info.channelCount}`;
                }
