@@ -11,8 +11,13 @@ export interface VisualizerOptions {
 }
 
 /**
- * AudioVisualizer – renders real-time dual-channel (L/R) amplitude meters on
- * an HTML5 canvas element placed inside the supplied container.
+ * AudioVisualizer – renders a real-time dual-channel (L/R) scrolling waveform
+ * on an HTML5 canvas element placed inside the supplied container.
+ *
+ * The canvas is divided horizontally: the top half shows the left channel
+ * (cyan) and the bottom half shows the right channel (magenta).  Each x-pixel
+ * represents one captured frame, creating a looping time-series view of the
+ * last ~280 frames of audio history.
  *
  * Lifecycle
  * ─────────
@@ -37,6 +42,12 @@ export class AudioVisualizer {
   // Current L/R amplitude levels (0–1) read from MVRP or set via update()
   private levelL: number = 0;
   private levelR: number = 0;
+
+  // Circular sample buffers – one entry per canvas pixel column
+  private readonly bufferWidth: number;
+  private readonly bufferL: number[];
+  private readonly bufferR: number[];
+  private bufferIndex: number = 0;
 
   // requestAnimationFrame handle
   private animFrameId: number | null = null;
@@ -63,6 +74,13 @@ export class AudioVisualizer {
     const ctx = this.canvas.getContext('2d');
     if (!ctx) throw new Error('[AudioVisualizer] Canvas 2D context unavailable');
     this.ctx2d = ctx;
+
+    // Derive buffer width from the canvas so they always stay in sync
+    this.bufferWidth = this.canvas.width;
+
+    // Initialise circular sample buffers (one sample per pixel column)
+    this.bufferL = new Array<number>(this.bufferWidth).fill(0);
+    this.bufferR = new Array<number>(this.bufferWidth).fill(0);
 
     // Draw an idle state so the canvas is not blank before audio starts
     this.drawFrame();
@@ -98,12 +116,15 @@ export class AudioVisualizer {
   /**
    * Push normalised L/R amplitude values directly into the visualizer.
    *
+   * Appends one sample to the circular buffers and redraws.
    * Useful for testing.  Values should be in the range 0–1.
-   * Redraws immediately so callers can drive the refresh rate externally.
    */
   update(levelL: number, levelR: number): void {
     this.levelL = Math.max(0, Math.min(1, levelL));
     this.levelR = Math.max(0, Math.min(1, levelR));
+    this.bufferL[this.bufferIndex] = this.levelL;
+    this.bufferR[this.bufferIndex] = this.levelR;
+    this.bufferIndex = (this.bufferIndex + 1) % this.bufferWidth;
     this.drawFrame();
   }
 
@@ -153,6 +174,11 @@ export class AudioVisualizer {
       this.levelR = rms;
     }
 
+    // Append the computed RMS to the circular buffers
+    this.bufferL[this.bufferIndex] = this.levelL;
+    this.bufferR[this.bufferIndex] = this.levelR;
+    this.bufferIndex = (this.bufferIndex + 1) % this.bufferWidth;
+
     // Ensure the animation loop is running even when no audio source has been
     // attached via attachAudioSource().
     if (this.animFrameId === null) {
@@ -195,6 +221,10 @@ export class AudioVisualizer {
           this.levelR = this.normalizeLevel(asLevel[1] ?? 0);
         }
       }
+      // Append current levels to the circular sample buffers
+      this.bufferL[this.bufferIndex] = this.levelL;
+      this.bufferR[this.bufferIndex] = this.levelR;
+      this.bufferIndex = (this.bufferIndex + 1) % this.bufferWidth;
       this.drawFrame();
     };
     this.animFrameId = requestAnimationFrame(tick);
@@ -226,49 +256,38 @@ export class AudioVisualizer {
     c.fillStyle = this.opts.backgroundColor;
     c.fillRect(0, 0, width, height);
 
-    // Two equal-width bars with padding on the sides and a gap between
-    const padX = Math.round(width * 0.1);
-    const gap = Math.round(width * 0.08);
-    const barW = Math.round((width - padX * 2 - gap) / 2);
-    const padY = Math.round(height * 0.05);
-    const barAreaH = height - padY * 2;
+    const halfH = height / 2;
+    // Vertical centre of each half-panel
+    const centerL = halfH / 2;
+    const centerR = halfH + halfH / 2;
+    // Maximum number of pixels a waveform line can extend from its centre
+    const maxSpan = halfH / 2;
 
-    this.drawAmplitudeBar(this.levelL, padX, padY, barW, barAreaH, this.opts.colorLeft);
-    this.drawAmplitudeBar(this.levelR, padX + barW + gap, padY, barW, barAreaH, this.opts.colorRight);
-  }
+    // Draw a subtle divider between the two channel halves
+    c.fillStyle = 'rgba(255,255,255,0.08)';
+    c.fillRect(0, halfH, width, 1);
 
-  /**
-   * Render a single vertical amplitude bar.
-   *
-   * @param amplitude  Normalised amplitude in the range 0–1.
-   * @param x          Left edge of the bar (canvas-space).
-   * @param y          Top edge of the bar area (canvas-space).
-   * @param barW       Width of the bar in pixels.
-   * @param barAreaH   Total height of the bar area in pixels.
-   * @param color      Fill colour for the bar.
-   */
-  private drawAmplitudeBar(
-    amplitude: number,
-    x: number,
-    y: number,
-    barW: number,
-    barAreaH: number,
-    color: string,
-  ): void {
-    const c = this.ctx2d;
+    // Render the time-series waveform: one vertical line per sample column.
+    // Start from bufferIndex (oldest sample) so chronological order maps
+    // left-to-right, producing a smooth scrolling effect as new samples arrive.
+    for (let i = 0; i < this.bufferWidth; i++) {
+      const sampleIdx = (this.bufferIndex + i) % this.bufferWidth;
+      const ampL = this.bufferL[sampleIdx] ?? 0;
+      const ampR = this.bufferR[sampleIdx] ?? 0;
 
-    // Dim background track
-    c.fillStyle = 'rgba(255,255,255,0.05)';
-    c.fillRect(x, y, barW, barAreaH);
+      // Top half: left channel (cyan), symmetric around centerL
+      const spanL = ampL * maxSpan;
+      if (spanL > 0) {
+        c.fillStyle = this.opts.colorLeft;
+        c.fillRect(i, Math.round(centerL - spanL), 1, Math.max(1, Math.round(spanL * 2)));
+      }
 
-    const fillH = Math.round(Math.min(amplitude, 1) * barAreaH);
-    if (fillH > 0) {
-      // Gradient from base colour at the bottom to near-white at the top
-      const grad = c.createLinearGradient(0, y + barAreaH, 0, y);
-      grad.addColorStop(0, color);
-      grad.addColorStop(1, 'rgba(255,255,255,0.85)');
-      c.fillStyle = grad;
-      c.fillRect(x, y + barAreaH - fillH, barW, fillH);
+      // Bottom half: right channel (magenta), symmetric around centerR
+      const spanR = ampR * maxSpan;
+      if (spanR > 0) {
+        c.fillStyle = this.opts.colorRight;
+        c.fillRect(i, Math.round(centerR - spanR), 1, Math.max(1, Math.round(spanR * 2)));
+      }
     }
   }
 }
