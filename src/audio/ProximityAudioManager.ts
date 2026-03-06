@@ -30,8 +30,9 @@ import { AVStreamAudioPlayer } from './AVStreamAudioPlayer.js';
  * ─────────────────
  *   getAudioBuffer()   – returns the live MVRP `m_Buffer` for direct PCM access
  *   getAudioMetadata() – returns sampleRate, samplesPerSlice, bytesPerSample
- *   These are used by AudioFrameCapture to feed decoded samples to a ring buffer
- *   for speech-to-text or other downstream processing pipelines.
+ *   These are available for advanced callers that need direct access to the
+ *   MVRP internal buffer.  AudioFrameCapture instead taps the live Web Audio
+ *   signal via an AnalyserNode connected to the AVStreamAudioPlayer's GainNode.
  *
  * Mute / deaf controls
  * ─────────────────────
