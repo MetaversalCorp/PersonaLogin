@@ -376,6 +376,142 @@
          font-family: 'Courier New', monospace;
          font-size: 11px;
       }
+
+      /* ── Audio Visualizer ─────────────────────────────────────────────────── */
+
+      .teleport-panel-inner {
+         display: grid;
+         grid-template-columns: 1fr 1fr;
+         gap: 16px;
+         align-items: flex-start;
+      }
+
+      .teleport-controls-col {
+         min-width: 0;
+      }
+
+      .audio-visualizer-col {
+         display: flex;
+         flex-direction: column;
+         align-items: center;
+         gap: 6px;
+      }
+
+      .audio-visualizer-container {
+         width: 280px;
+         height: 240px;
+         background: rgba(0, 0, 0, 0.45);
+         border-radius: 4px;
+         border: 1px solid rgba(255, 255, 255, 0.2);
+         overflow: hidden;
+         position: relative;
+      }
+
+      .audio-visualizer-canvas {
+         width: 100%;
+         height: 100%;
+         display: block;
+      }
+
+      .visualizer-title {
+         font-size: 10px;
+         font-weight: 600;
+         opacity: 0.8;
+         text-transform: uppercase;
+         letter-spacing: 0.06em;
+         text-align: center;
+      }
+
+      /* Stack vertically on narrow screens */
+      @media (max-width: 480px) {
+         .teleport-panel-inner {
+            grid-template-columns: 1fr;
+         }
+
+         .audio-visualizer-col {
+            width: 100%;
+            align-items: stretch;
+         }
+
+         .audio-visualizer-container {
+            width: 100%;
+            height: 120px;
+         }
+      }
+
+      /* ── Speech-to-Text Demo ─────────────────────────────────────────────── */
+
+      .stt-panel {
+         margin-top: 8px;
+         background: rgba(0, 0, 0, 0.55);
+         border-radius: 8px;
+         padding: 16px;
+         color: #e0e0e0;
+         width: 100%;
+      }
+
+      .stt-panel h6 {
+         font-size: 11px;
+         font-weight: 700;
+         text-transform: uppercase;
+         letter-spacing: 0.08em;
+         color: #00eaff;
+         margin-bottom: 10px;
+      }
+
+      .stt-controls {
+         display: flex;
+         gap: 8px;
+         flex-wrap: wrap;
+         margin-bottom: 10px;
+      }
+
+      .stt-controls button {
+         font-size: 11px;
+         padding: 4px 12px;
+      }
+
+      .stt-status {
+         font-size: 11px;
+         opacity: 0.7;
+         margin-bottom: 8px;
+      }
+
+      .stt-status span {
+         font-weight: 600;
+         color: #ff00cc;
+      }
+
+      .stt-buffer-info {
+         font-size: 10px;
+         font-family: 'Courier New', monospace;
+         opacity: 0.65;
+      }
+
+      .stt-frame-info {
+         font-size: 10px;
+         font-family: 'Courier New', monospace;
+         opacity: 0.75;
+         margin-top: 4px;
+         display: flex;
+         align-items: center;
+         gap: 4px;
+      }
+
+      .stt-live-dot {
+         display: inline-block;
+         width: 7px;
+         height: 7px;
+         border-radius: 50%;
+         background: #ff4444;
+         animation: stt-pulse 1s ease-in-out infinite;
+         flex-shrink: 0;
+      }
+
+      @keyframes stt-pulse {
+         0%, 100% { opacity: 1; transform: scale(1); }
+         50%       { opacity: 0.3; transform: scale(0.75); }
+      }
    </style>
 </head>
 
@@ -572,6 +708,10 @@
          <div class="teleport-panel">
             <h5><i class="fa-solid fa-rocket"></i> Teleport Avatar</h5>
 
+            <div class="teleport-panel-inner">
+               <!-- Left column: teleport controls -->
+               <div class="teleport-controls-col">
+
             <div class="teleport-form-group">
                <label>Celestial ID (pParent)</label>
                <input type="text" id="celestial-id" placeholder="e.g., 104" value="104">
@@ -621,6 +761,35 @@
                   <div>dZ: <span id="coord-dz">0.00</span></div>
                </div>
             </div>
+
+               </div><!-- /.teleport-controls-col -->
+
+               <!-- Right column: audio waveform visualizer + capture controls -->
+               <div class="audio-visualizer-col">
+                  <div class="visualizer-title">Inbound Audio</div>
+                  <div class="audio-visualizer-container" id="audio-visualizer-container"></div>
+
+                  <!-- Inbound Audio Capture controls -->
+                  <div class="stt-panel" id="stt-panel" style="display:none;">
+                     <h6><i class="fa-solid fa-wave-square"></i> Inbound Audio Capture</h6>
+                     <div class="stt-controls">
+                        <button class="btn btn-sm btn-outline-info"  id="stt-enable-btn">Enable Capture</button>
+                        <button class="btn btn-sm btn-outline-secondary" id="stt-disable-btn" disabled>Disable Capture</button>
+                        <button class="btn btn-sm btn-outline-warning" id="stt-clear-btn">Clear Buffer</button>
+                     </div>
+                     <div class="stt-status">
+                        Status: <span id="stt-status-text">Inactive</span>
+                     </div>
+                     <div class="stt-buffer-info" id="stt-buffer-info">
+                        Buffer: — samples &nbsp;|&nbsp; Sample rate: — Hz &nbsp;|&nbsp; Channels: —
+                     </div>
+                     <div class="stt-frame-info" id="stt-frame-info" style="display:none;">
+                        <span class="stt-live-dot"></span>Updates: <span id="stt-frame-count">0</span> &nbsp;|&nbsp; <span id="stt-fps">0.0</span> fps
+                     </div>
+                  </div><!-- /.stt-panel -->
+               </div><!-- /.audio-visualizer-col -->
+
+            </div><!-- /.teleport-panel-inner -->
          </div>
 
          <div class="card bg-light rounded-5">
@@ -667,13 +836,125 @@
 
    <script type="module">
       // Import real PersonaLogin classes from app.js (compiled TypeScript)
-      import { LoginClient } from './app.js';
+      import { LoginClient, AudioFrameCapture } from './app.js';
 
       // Initialize the app
       document.addEventListener('DOMContentLoaded', () => {
          const loginClient = new LoginClient(document.body);
          window.loginClient = loginClient;
          console.log('RP1 Demo Login initialized with real PersonaSession and PersonaPuppet');
+
+         // ── Speech-to-Text demo wiring ───────────────────────────────────────
+         let sttCapture = null;
+
+         const sttPanel      = document.getElementById('stt-panel');
+         const sttEnableBtn  = document.getElementById('stt-enable-btn');
+         const sttDisableBtn = document.getElementById('stt-disable-btn');
+         const sttClearBtn   = document.getElementById('stt-clear-btn');
+         const sttStatusEl   = document.getElementById('stt-status-text');
+         const sttInfoEl     = document.getElementById('stt-buffer-info');
+         const sttFrameInfoEl   = document.getElementById('stt-frame-info');
+         const sttFrameCountEl  = document.getElementById('stt-frame-count');
+         const sttFpsEl         = document.getElementById('stt-fps');
+
+         let sttFrameCount = 0;
+         let sttFpsCounter = 0;
+         let sttLastFpsTime = 0;
+
+         /** Retrieve the active ProximityAudioManager through the session chain. */
+         function getAudioManager() {
+            return loginClient.session?.personaSession?.inWorld?.audio ?? null;
+         }
+
+         /** Update the buffer-info line on every animation frame while enabled. */
+         function updateSttInfo(timestamp) {
+            if (!sttCapture || !sttCapture.isEnabled) return;
+            const info = sttCapture.buffer.info;
+
+            sttFrameCount++;
+            sttFpsCounter++;
+
+            if (sttInfoEl) {
+               sttInfoEl.textContent =
+                  `Buffer: ${info.available.toLocaleString()} samples` +
+                  ` \u00a0|\u00a0 Sample rate: ${info.sampleRate.toLocaleString()} Hz` +
+                  ` \u00a0|\u00a0 Channels: ${info.channelCount}`;
+            }
+
+            if (sttFrameInfoEl) {
+               sttFrameInfoEl.style.display = 'flex';
+               if (sttFrameCountEl) sttFrameCountEl.textContent = sttFrameCount.toLocaleString();
+
+               // Recalculate FPS once per second
+               if (sttLastFpsTime === 0) sttLastFpsTime = timestamp;
+               const elapsed = timestamp - sttLastFpsTime;
+               if (elapsed >= 1000) {
+                  const fps = (sttFpsCounter / elapsed * 1000).toFixed(1);
+                  if (sttFpsEl) sttFpsEl.textContent = fps;
+                  sttFpsCounter = 0;
+                  sttLastFpsTime = timestamp;
+               }
+            }
+
+            requestAnimationFrame(updateSttInfo);
+         }
+
+         sttEnableBtn?.addEventListener('click', () => {
+            const audioManager = getAudioManager();
+            if (!audioManager) {
+               alert('Audio manager not available yet. Enter the world first.');
+               return;
+            }
+
+            if (!sttCapture) {
+               const meta = audioManager.getAudioMetadata();
+               sttCapture = new AudioFrameCapture(audioManager, {
+                  sampleRate:   meta?.sampleRate   ?? 48000,
+                  channelCount: 2,
+               });
+            }
+
+            sttCapture.enable();
+            sttFrameCount = 0;
+            sttFpsCounter = 0;
+            sttLastFpsTime = 0;
+            if (sttStatusEl) sttStatusEl.textContent = 'Active';
+            if (sttEnableBtn)  sttEnableBtn.disabled  = true;
+            if (sttDisableBtn) sttDisableBtn.disabled = false;
+            requestAnimationFrame(updateSttInfo);
+         });
+
+         sttDisableBtn?.addEventListener('click', () => {
+            sttCapture?.disable();
+            if (sttStatusEl)  sttStatusEl.textContent  = 'Inactive';
+            if (sttEnableBtn)  sttEnableBtn.disabled  = false;
+            if (sttDisableBtn) sttDisableBtn.disabled = true;
+            if (sttFrameInfoEl) sttFrameInfoEl.style.display = 'none';
+         });
+
+         sttClearBtn?.addEventListener('click', () => {
+            sttCapture?.clearBuffer();
+            if (sttInfoEl) {
+               const info = sttCapture?.buffer?.info;
+               if (info) {
+                  sttInfoEl.textContent =
+                     `Buffer: 0 samples` +
+                     ` \u00a0|\u00a0 Sample rate: ${info.sampleRate.toLocaleString()} Hz` +
+                     ` \u00a0|\u00a0 Channels: ${info.channelCount}`;
+               }
+            }
+         });
+
+         // Show the STT panel once a session-section becomes visible.
+         // We watch for the class change on the session-section element.
+         const sessionSection = document.getElementById('session-section');
+         if (sessionSection && sttPanel) {
+            const observer = new MutationObserver(() => {
+               const visible = !sessionSection.classList.contains('d-none');
+               sttPanel.style.display = visible ? 'block' : 'none';
+            });
+            observer.observe(sessionSection, { attributes: true, attributeFilter: ['class'] });
+         }
       });
    </script>
 

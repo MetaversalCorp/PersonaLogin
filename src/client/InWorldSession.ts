@@ -3,6 +3,7 @@ import { ConnectionState, PersonaInfo } from "../types/index.js";
 import { PersonaPuppet } from "../avatar/PersonaPuppet.js";
 import type { PersonaSession } from "../client/PersonaSession.js";
 import { ProximityAudioManager } from "../audio/ProximityAudioManager.js";
+import { AudioVisualizer } from "../client/AudioVisualizer.js";
 
 /**
  * InWorldSession - integrates the active persona with the RP1 world environment.
@@ -14,6 +15,7 @@ export class InWorldSession extends Session {
   private puppet: PersonaPuppet | null = null;
   readonly personaSession: PersonaSession;
   private audioManager: ProximityAudioManager | null = null;
+  private visualizer: AudioVisualizer | null = null;
 
   constructor(personaInfo: PersonaInfo, personaSession: PersonaSession) {
     super();
@@ -42,6 +44,13 @@ export class InWorldSession extends Session {
     if (pLnG) {
       this.audioManager = new ProximityAudioManager(pLnG);
       this.audioManager.start();
+
+      // Attach the waveform visualizer if the container element is present
+      const vizContainer = document.getElementById('audio-visualizer-container');
+      if (vizContainer) {
+        this.visualizer = new AudioVisualizer(vizContainer);
+        this.visualizer.attachAudioSource(this.audioManager);
+      }
     } else {
       console.warn('[InWorldSession] pLnGClient unavailable; proximity audio disabled');
     }
@@ -50,6 +59,11 @@ export class InWorldSession extends Session {
   }
 
   async disconnect(): Promise<void> {
+    if (this.visualizer) {
+      this.visualizer.dispose();
+      this.visualizer = null;
+    }
+
     if (this.audioManager) {
       this.audioManager.stop();
       this.audioManager = null;

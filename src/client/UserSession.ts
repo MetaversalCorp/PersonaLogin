@@ -160,6 +160,11 @@ export class UserSession extends Session {
     this._personaSession.teleportTo(celestialId, position);
   }
 
+  /** Returns the active PersonaSession, or `null` before `pickPersona()` is called. */
+  get personaSession(): PersonaSession | null {
+    return this._personaSession;
+  }
+
   /**
    * Set up a PersonaSession for the given persona ID,
    * then resolve the enclosing promise once the session is connected.

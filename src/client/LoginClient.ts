@@ -51,6 +51,14 @@ export class LoginClient {
     return this._pLnG;
   }
 
+  /**
+   * Returns the active UserSession once authenticated, or `null` before login.
+   * Use `userSession.personaSession?.inWorld?.audio` to reach the audio manager.
+   */
+  get session(): UserSession | null {
+    return this.userSession;
+  }
+
   // ─── UI helpers ────────────────────────────────────────────────────────────
 
   private el<T extends HTMLElement>(id: string): T | null {
