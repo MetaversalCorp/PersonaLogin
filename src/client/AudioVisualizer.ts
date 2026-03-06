@@ -1,3 +1,4 @@
+import type { AVStreamAudioPlayer } from '../audio/AVStreamAudioPlayer.js';
 import type { ProximityAudioManager } from '../audio/ProximityAudioManager.js';
 
 /** Options for configuring the AudioVisualizer. */
@@ -27,11 +28,12 @@ export interface VisualizerOptions {
  *   …avatar is active…
  *   vis.dispose();                                  // stops loop, removes canvas
  *
- * Audio levels are sampled from MVRP's inbound decoded PCM capture buffer
- * (`m_Buffer.asSample`) each animation frame.  RMS is computed per channel
- * from a chunk of interleaved stereo samples, providing a true representation
- * of the received audio.  When no audio source is attached, `update()` can be
- * called directly with normalised L/R amplitude values for testing.
+ * Audio levels are sampled each animation frame via an AnalyserNode tapped
+ * into the AVStreamAudioPlayer's GainNode.  `getFloatTimeDomainData()` is
+ * called every frame to read the most recent decoded PCM samples, providing a
+ * continuously responsive waveform display.  When no audio source is attached,
+ * `update()` can be called directly with normalised L/R amplitude values for
+ * testing.
  */
 export class AudioVisualizer {
   private readonly container: HTMLElement;
@@ -41,6 +43,13 @@ export class AudioVisualizer {
 
   // MVRP audio manager reference (set in attachAudioSource)
   private audioManager: ProximityAudioManager | null = null;
+
+  // AnalyserNode tap into the AVStreamAudioPlayer's GainNode
+  private analyserNode: AnalyserNode | null = null;
+  private analyserBuffer: Float32Array<ArrayBuffer> | null = null;
+
+  // AVStreamAudioPlayer reference kept for disconnectTap() in dispose()
+  private audioPlayer: AVStreamAudioPlayer | null = null;
 
   // Current L/R amplitude levels (0–1) read from MVRP or set via update()
   private levelL: number = 0;
@@ -91,11 +100,13 @@ export class AudioVisualizer {
   /**
    * Wire the visualizer into the live audio stream managed by `audioManager`.
    *
-   * Samples decoded PCM audio from MVRP's inbound capture buffer each
-   * animation frame and computes per-channel RMS to drive the waveform display.
-   * No Web Audio nodes are created or connected.
-   * Starts the requestAnimationFrame draw loop automatically.
+   * Creates an AnalyserNode (fftSize 2048) tapped into the
+   * AVStreamAudioPlayer's GainNode via `player.connectTap()`.  Each animation
+   * frame the loop calls `getFloatTimeDomainData()` on the AnalyserNode and
+   * feeds the result to `updateFromPcm()` so the waveform reflects the audio
+   * currently being played.
    *
+   * Starts the requestAnimationFrame draw loop automatically.
    * Idempotent: subsequent calls have no effect while a source is already
    * attached.
    */
@@ -106,6 +117,16 @@ export class AudioVisualizer {
     if (!proximity) {
       console.warn('[AudioVisualizer] Proximity not ready; call after ProximityAudioManager.start()');
       return;
+    }
+
+    const player = audioManager.getAudioPlayer();
+    if (player) {
+      const analyser = player.context.createAnalyser();
+      analyser.fftSize = 2048;
+      this.analyserNode = analyser;
+      this.analyserBuffer = new Float32Array(analyser.fftSize) as Float32Array<ArrayBuffer>;
+      this.audioPlayer = player;
+      player.connectTap(analyser);
     }
 
     this.audioManager = audioManager;
@@ -188,6 +209,14 @@ export class AudioVisualizer {
    */
   dispose(): void {
     this.stopLoop();
+
+    if (this.analyserNode && this.audioPlayer) {
+      this.audioPlayer.disconnectTap(this.analyserNode);
+      this.analyserNode = null;
+      this.analyserBuffer = null;
+      this.audioPlayer = null;
+    }
+
     this.audioManager = null;
 
     if (this.canvas.parentNode) {
@@ -205,31 +234,39 @@ export class AudioVisualizer {
     const MAX_INTERLEAVED_SAMPLES = 960;
     const tick = () => {
       this.animFrameId = requestAnimationFrame(tick);
-      // Sample from the inbound decoded PCM capture buffer
-      const buf = this.audioManager?.getAudioBuffer();
-      if (buf?.asSample && (buf.nCount as number) > 0) {
-        const asSample = buf.asSample as number[];
-        const head: number = (buf.nHead as number) ?? 0;
-        const totalSamples = asSample.length;
-        // nCount is the total number of individual interleaved samples in the
-        // current slice (L+R combined).  Divide by 2 to get stereo frame count.
-        const count = Math.min(MAX_INTERLEAVED_SAMPLES, buf.nCount as number);
-        const frames = Math.floor(count / 2);
-        if (frames > 0) {
-          let sumSqL = 0;
-          let sumSqR = 0;
-          for (let i = 0; i < frames; i++) {
-            const l = asSample[(head + i * 2) % totalSamples] ?? 0;
-            const r = asSample[(head + i * 2 + 1) % totalSamples] ?? 0;
-            sumSqL += l * l;
-            sumSqR += r * r;
+
+      if (this.analyserNode && this.analyserBuffer) {
+        // Poll fresh decoded PCM samples from the AnalyserNode each frame and
+        // feed them to updateFromPcm() to drive the waveform display.
+        this.analyserNode.getFloatTimeDomainData(this.analyserBuffer);
+        this.updateFromPcm(this.analyserBuffer, 2, false);
+      } else {
+        // Fallback: sample from the inbound decoded PCM capture buffer
+        const buf = this.audioManager?.getAudioBuffer();
+        if (buf?.asSample && (buf.nCount as number) > 0) {
+          const asSample = buf.asSample as number[];
+          const head: number = (buf.nHead as number) ?? 0;
+          const totalSamples = asSample.length;
+          // nCount is the total number of individual interleaved samples in the
+          // current slice (L+R combined).  Divide by 2 to get stereo frame count.
+          const count = Math.min(MAX_INTERLEAVED_SAMPLES, buf.nCount as number);
+          const frames = Math.floor(count / 2);
+          if (frames > 0) {
+            let sumSqL = 0;
+            let sumSqR = 0;
+            for (let i = 0; i < frames; i++) {
+              const l = asSample[(head + i * 2) % totalSamples] ?? 0;
+              const r = asSample[(head + i * 2 + 1) % totalSamples] ?? 0;
+              sumSqL += l * l;
+              sumSqR += r * r;
+            }
+            this.levelL = Math.min(Math.sqrt(sumSqL / frames), 1);
+            this.levelR = Math.min(Math.sqrt(sumSqR / frames), 1);
           }
-          this.levelL = Math.min(Math.sqrt(sumSqL / frames), 1);
-          this.levelR = Math.min(Math.sqrt(sumSqR / frames), 1);
         }
+        this.pushSample(this.levelL, this.levelR);
+        this.drawFrame();
       }
-      this.pushSample(this.levelL, this.levelR);
-      this.drawFrame();
     };
     this.animFrameId = requestAnimationFrame(tick);
   }
