@@ -1,4 +1,3 @@
-import type { AVStreamAudioPlayer } from './AVStreamAudioPlayer.js';
 import type { ProximityAudioManager } from './ProximityAudioManager.js';
 import { AudioFrameBuffer } from './AudioFrameBuffer.js';
 
@@ -27,17 +26,16 @@ export interface AudioFrameCaptureOptions {
 const DEFAULT_BUFFER_DURATION_SECONDS = 4;
 
 /**
- * AudioFrameCapture – taps the live audio stream flowing through
- * {@link AVStreamAudioPlayer} and buffers the decoded PCM samples in an
- * {@link AudioFrameBuffer} ring buffer for consumption by speech-to-text or
- * other audio processing pipelines.
+ * AudioFrameCapture – taps the live audio stream at {@link AudioContext.destination}
+ * and buffers the decoded PCM samples in an {@link AudioFrameBuffer} ring
+ * buffer for consumption by speech-to-text or other audio processing pipelines.
  *
  * Instead of polling MVRP's internal `m_Buffer` (which is not populated during
- * normal Web Audio API playback), an {@link AnalyserNode} is connected in
- * parallel to the player's GainNode via {@link AVStreamAudioPlayer.connectTap}.
- * Each `requestAnimationFrame` tick reads the most-recently-decoded samples
- * via `getFloatTimeDomainData()` and appends only the samples that have
- * elapsed since the previous poll to avoid duplication.
+ * normal Web Audio API playback), an {@link AnalyserNode} is connected directly
+ * to `AudioContext.destination` where MVRP outputs decoded audio.  Each
+ * `requestAnimationFrame` tick reads the most-recently-decoded samples via
+ * `getFloatTimeDomainData()` and appends only the samples that have elapsed
+ * since the previous poll to avoid duplication.
  *
  * Capture does **not** affect the existing MVRP → AudioContext.destination
  * playback chain; the AnalyserNode is a parallel, read-only tap.
@@ -60,7 +58,7 @@ export class AudioFrameCapture {
   private _enabled: boolean = false;
   private pollHandle: ReturnType<typeof requestAnimationFrame> | null = null;
 
-  /** AnalyserNode tapped into the GainNode of AVStreamAudioPlayer. */
+  /** AnalyserNode connected directly to AudioContext.destination to capture MVRP output. */
   private analyserNode: AnalyserNode | null = null;
   /** Scratch buffer for `getFloatTimeDomainData` – sized to `analyserNode.fftSize`. */
   private analyserBuffer: Float32Array | null = null;
@@ -69,7 +67,7 @@ export class AudioFrameCapture {
 
   /**
    * @param audioManager  The active ProximityAudioManager whose
-   *                      {@link AVStreamAudioPlayer} will be tapped via an
+   *                      {@link AudioContext} destination will be tapped via an
    *                      AnalyserNode for decoded audio frames.
    * @param options       Optional buffer / stream configuration.
    */
@@ -87,20 +85,25 @@ export class AudioFrameCapture {
   /**
    * Start capturing decoded audio frames.
    * Idempotent: calling while already enabled has no effect.
+   *
+   * Connects an AnalyserNode directly to AudioContext.destination to capture
+   * the live decoded PCM stream from MVRP.
    */
   enable(): void {
     if (this._enabled) return;
 
     const ctx: AudioContext | null = this.audioManager.getAudioContext();
-    const player: AVStreamAudioPlayer | null = this.audioManager.getAudioPlayer();
 
-    if (ctx && player) {
+    if (ctx) {
       this.analyserNode = ctx.createAnalyser();
       // fftSize must be a power of two; 2048 gives ~42 ms of history at 48 kHz,
       // comfortably covering one rAF interval (~16 ms at 60 fps).
       this.analyserNode.fftSize = 2048;
       this.analyserBuffer = new Float32Array(this.analyserNode.fftSize);
-      player.connectTap(this.analyserNode);
+
+      // Connect AnalyserNode directly to destination where MVRP outputs audio
+      // (NOT to AVStreamAudioPlayer - that only handles user-scheduled buffers)
+      this.analyserNode.connect(ctx.destination);
     }
 
     this._enabled = true;
@@ -124,8 +127,8 @@ export class AudioFrameCapture {
     }
 
     if (this.analyserNode) {
-      const player: AVStreamAudioPlayer | null = this.audioManager.getAudioPlayer();
-      player?.disconnectTap(this.analyserNode);
+      // Disconnect from destination (not from player)
+      this.analyserNode.disconnect();
       this.analyserNode = null;
       this.analyserBuffer = null;
     }
