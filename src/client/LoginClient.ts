@@ -255,16 +255,16 @@ export class LoginClient {
 
     // Lat/lon fine-tuning increment/decrement buttons
     this.el("lat-decr")?.addEventListener("click", () => {
-      this.adjustLatLon("teleport-latitude", -0.001);
+      this.adjustLatLon("teleport-latitude", -0.0001);
     });
     this.el("lat-incr")?.addEventListener("click", () => {
-      this.adjustLatLon("teleport-latitude", 0.001);
+      this.adjustLatLon("teleport-latitude", 0.0001);
     });
     this.el("lon-decr")?.addEventListener("click", () => {
-      this.adjustLatLon("teleport-longitude", -0.001);
+      this.adjustLatLon("teleport-longitude", -0.0001);
     });
     this.el("lon-incr")?.addEventListener("click", () => {
-      this.adjustLatLon("teleport-longitude", 0.001);
+      this.adjustLatLon("teleport-longitude", 0.0001);
     });
 
     // Radius fine-tuning increment/decrement buttons (±1.0 m)
