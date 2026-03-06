@@ -458,6 +458,7 @@ export class LoginClient {
         btn.innerHTML = '<i class="fa-solid fa-satellite-dish"></i> Avatar Updates Sending Active';
         btn.classList.add("active");
       }
+      console.log('[LoginClient] Starting avatar updates via MVRP tick handler');
       this.userSession?.personaSession?.startAvatarUpdates(() => {
         try {
           this.sendAvatarUpdate();
@@ -470,6 +471,7 @@ export class LoginClient {
         btn.innerHTML = '<i class="fa-solid fa-satellite-dish"></i> Start Avatar Updates';
         btn.classList.remove("active");
       }
+      console.log('[LoginClient] Stopping avatar updates');
       this.userSession?.personaSession?.stopAvatarUpdates();
     }
   }
