@@ -44,6 +44,12 @@ export class AudioVisualizer {
   private levelL: number = 0;
   private levelR: number = 0;
 
+  // Circular sample buffers – one entry per canvas pixel column
+  private readonly bufferWidth: number;
+  private readonly bufferL: number[];
+  private readonly bufferR: number[];
+  private bufferIndex: number = 0;
+
   // requestAnimationFrame handle
   private animFrameId: number | null = null;
 
@@ -82,6 +88,13 @@ export class AudioVisualizer {
     if (!ctx) throw new Error('[AudioVisualizer] Canvas 2D context unavailable');
     this.ctx2d = ctx;
 
+    // Derive buffer width from the canvas so they always stay in sync
+    this.bufferWidth = this.canvas.width;
+
+    // Initialise circular sample buffers (one sample per pixel column)
+    this.bufferL = new Array<number>(this.bufferWidth).fill(0);
+    this.bufferR = new Array<number>(this.bufferWidth).fill(0);
+
     // Draw an idle state so the canvas is not blank before audio starts
     this.drawFrame();
   }
@@ -116,8 +129,8 @@ export class AudioVisualizer {
   /**
    * Push normalised L/R amplitude values directly into the visualizer.
    *
+   * Appends one sample to the circular buffers and redraws.
    * Useful for testing.  Values should be in the range 0–1.
-   * Redraws immediately so callers can drive the refresh rate externally.
    */
   update(levelL: number, levelR: number): void {
     this.levelL = Math.max(0, Math.min(1, levelL));
@@ -171,6 +184,11 @@ export class AudioVisualizer {
       this.levelL = rms;
       this.levelR = rms;
     }
+
+    // Append the computed RMS to the circular buffers
+    this.bufferL[this.bufferIndex] = this.levelL;
+    this.bufferR[this.bufferIndex] = this.levelR;
+    this.bufferIndex = (this.bufferIndex + 1) % this.bufferWidth;
 
     // Ensure the animation loop is running even when no audio source has been
     // attached via attachAudioSource().
