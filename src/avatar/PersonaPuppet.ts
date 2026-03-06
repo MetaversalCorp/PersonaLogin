@@ -86,6 +86,11 @@ export class PersonaPuppet extends Avatar {
     const cosHalf = Math.cos(this.transform.rotY / 2);
     const rotDwV = rPersona.Quat_Encode([0, sinHalf, 0, cosHalf]);
 
+    if (typeof rotDwV !== 'number' || isNaN(rotDwV)) {
+      console.warn('[PersonaPuppet] Quat_Encode returned invalid value:', rotDwV, ', skipping sendUpdate');
+      return;
+    }
+
     rPersona.Send('UPDATE', {
       tmStamp,
       pState: {

@@ -454,7 +454,11 @@ export class LoginClient {
         btn.classList.add("active");
       }
       this.avatarUpdateInterval = window.setInterval(() => {
-        this.sendAvatarUpdate();
+        try {
+          this.sendAvatarUpdate();
+        } catch (err) {
+          console.error('[LoginClient] sendAvatarUpdate error:', err);
+        }
       }, AVATAR_UPDATE_INTERVAL_MS);
     } else {
       if (btn) {
