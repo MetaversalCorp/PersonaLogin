@@ -27,8 +27,10 @@ export interface VisualizerOptions {
  *   …avatar is active…
  *   vis.dispose();                                  // stops loop, removes canvas
  *
- * Audio levels are read directly from MVRP's internal `m_Output.asLevel` array
- * each animation frame.  When no audio source is attached, `update()` can be
+ * Audio levels are sampled from MVRP's inbound decoded PCM capture buffer
+ * (`m_Buffer.asSample`) each animation frame.  RMS is computed per channel
+ * from a chunk of interleaved stereo samples, providing a true representation
+ * of the received audio.  When no audio source is attached, `update()` can be
  * called directly with normalised L/R amplitude values for testing.
  */
 export class AudioVisualizer {
@@ -44,12 +46,6 @@ export class AudioVisualizer {
   private levelL: number = 0;
   private levelR: number = 0;
 
-  // Circular sample buffers – one entry per canvas pixel column
-  private readonly bufferWidth: number;
-  private readonly bufferL: number[];
-  private readonly bufferR: number[];
-  private bufferIndex: number = 0;
-
   // requestAnimationFrame handle
   private animFrameId: number | null = null;
 
@@ -64,8 +60,6 @@ export class AudioVisualizer {
 
   // Write cursor; the oldest sample lives at this index
   private bufferIndex: number = 0;
-
-  // ─── Constructor ────────────────────────────────────────────────────────────
 
   constructor(container: HTMLElement, options?: VisualizerOptions) {
     this.container = container;
@@ -88,13 +82,6 @@ export class AudioVisualizer {
     if (!ctx) throw new Error('[AudioVisualizer] Canvas 2D context unavailable');
     this.ctx2d = ctx;
 
-    // Derive buffer width from the canvas so they always stay in sync
-    this.bufferWidth = this.canvas.width;
-
-    // Initialise circular sample buffers (one sample per pixel column)
-    this.bufferL = new Array<number>(this.bufferWidth).fill(0);
-    this.bufferR = new Array<number>(this.bufferWidth).fill(0);
-
     // Draw an idle state so the canvas is not blank before audio starts
     this.drawFrame();
   }
@@ -104,9 +91,9 @@ export class AudioVisualizer {
   /**
    * Wire the visualizer into the live audio stream managed by `audioManager`.
    *
-   * Reads audio levels directly from MVRP's `m_Output.asLevel` array each
-   * animation frame, which contains the actual decoded audio amplitude data
-   * at the output stage.  No Web Audio nodes are created or connected.
+   * Samples decoded PCM audio from MVRP's inbound capture buffer each
+   * animation frame and computes per-channel RMS to drive the waveform display.
+   * No Web Audio nodes are created or connected.
    * Starts the requestAnimationFrame draw loop automatically.
    *
    * Idempotent: subsequent calls have no effect while a source is already
@@ -185,11 +172,6 @@ export class AudioVisualizer {
       this.levelR = rms;
     }
 
-    // Append the computed RMS to the circular buffers
-    this.bufferL[this.bufferIndex] = this.levelL;
-    this.bufferR[this.bufferIndex] = this.levelR;
-    this.bufferIndex = (this.bufferIndex + 1) % this.bufferWidth;
-
     // Ensure the animation loop is running even when no audio source has been
     // attached via attachAudioSource().
     this.pushSample(this.levelL, this.levelR);
@@ -219,18 +201,31 @@ export class AudioVisualizer {
 
   private startLoop(): void {
     if (this.animFrameId !== null) return;
+    // Maximum number of interleaved stereo samples (L+R combined) to read per frame.
+    const MAX_INTERLEAVED_SAMPLES = 960;
     const tick = () => {
       this.animFrameId = requestAnimationFrame(tick);
-      // Read audio levels directly from MVRP's output stage
-      const proximity = this.audioManager?.getProximity();
-      if (proximity) {
-        const mvrpAudio = proximity.GetAudio();
-        const asLevel = mvrpAudio?.m_Output?.asLevel;
-        if (asLevel) {
-          // asLevel contains signed int16 amplitudes; 32768 is the max positive
-          // value for a signed 16-bit integer, so dividing normalises to 0–1.
-          this.levelL = this.normalizeLevel(asLevel[0] ?? 0);
-          this.levelR = this.normalizeLevel(asLevel[1] ?? 0);
+      // Sample from the inbound decoded PCM capture buffer
+      const buf = this.audioManager?.getAudioBuffer();
+      if (buf?.asSample && (buf.nCount as number) > 0) {
+        const asSample = buf.asSample as number[];
+        const head: number = (buf.nHead as number) ?? 0;
+        const totalSamples = asSample.length;
+        // nCount is the total number of individual interleaved samples in the
+        // current slice (L+R combined).  Divide by 2 to get stereo frame count.
+        const count = Math.min(MAX_INTERLEAVED_SAMPLES, buf.nCount as number);
+        const frames = Math.floor(count / 2);
+        if (frames > 0) {
+          let sumSqL = 0;
+          let sumSqR = 0;
+          for (let i = 0; i < frames; i++) {
+            const l = asSample[(head + i * 2) % totalSamples] ?? 0;
+            const r = asSample[(head + i * 2 + 1) % totalSamples] ?? 0;
+            sumSqL += l * l;
+            sumSqR += r * r;
+          }
+          this.levelL = Math.min(Math.sqrt(sumSqL / frames), 1);
+          this.levelR = Math.min(Math.sqrt(sumSqR / frames), 1);
         }
       }
       this.pushSample(this.levelL, this.levelR);
@@ -247,15 +242,6 @@ export class AudioVisualizer {
   }
 
   // ─── Rendering ──────────────────────────────────────────────────────────────
-
-  /**
-   * Normalise a signed int16 amplitude value to the range 0–1.
-   *
-   * @param value  Raw signed int16 amplitude from `m_Output.asLevel`.
-   */
-  private normalizeLevel(value: number): number {
-    return Math.min(Math.abs(value) / 0.1, 1);
-  }
 
   /**
    * Write the current L/R levels into the circular sample buffers and advance
