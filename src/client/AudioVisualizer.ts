@@ -56,7 +56,7 @@ export class AudioVisualizer {
     this.canvas = document.createElement('canvas');
     this.canvas.className = 'audio-visualizer-canvas';
     // Intrinsic resolution; CSS controls display size
-    this.canvas.width  = 280;
+    this.canvas.width = 280;
     this.canvas.height = 240;
     container.appendChild(this.canvas);
 
@@ -136,7 +136,7 @@ export class AudioVisualizer {
 
     if (channelCount >= 2) {
       for (let i = 0; i < frames; i++) {
-        const l = (samples[i * 2]     as number) / scale;
+        const l = (samples[i * 2] as number) / scale;
         const r = (samples[i * 2 + 1] as number) / scale;
         sumSqL += l * l;
         sumSqR += r * r;
@@ -215,7 +215,7 @@ export class AudioVisualizer {
    * @param value  Raw signed int16 amplitude from `m_Output.asLevel`.
    */
   private normalizeLevel(value: number): number {
-    return Math.min(Math.abs(value) / 32768, 1);
+    return Math.min(Math.abs(value) / 0.1, 1);
   }
 
   private drawFrame(): void {
@@ -228,12 +228,12 @@ export class AudioVisualizer {
 
     // Two equal-width bars with padding on the sides and a gap between
     const padX = Math.round(width * 0.1);
-    const gap  = Math.round(width * 0.08);
+    const gap = Math.round(width * 0.08);
     const barW = Math.round((width - padX * 2 - gap) / 2);
     const padY = Math.round(height * 0.05);
     const barAreaH = height - padY * 2;
 
-    this.drawAmplitudeBar(this.levelL, padX,              padY, barW, barAreaH, this.opts.colorLeft);
+    this.drawAmplitudeBar(this.levelL, padX, padY, barW, barAreaH, this.opts.colorLeft);
     this.drawAmplitudeBar(this.levelR, padX + barW + gap, padY, barW, barAreaH, this.opts.colorRight);
   }
 
