@@ -29,12 +29,10 @@ export interface VisualizerOptions {
  *
  * Audio levels are sampled each animation frame by reading directly from
  * MVRP's live `m_Buffer.asSample` decoded PCM data via
- * `ProximityAudioManager.getAudioBuffer()`.  The `nHead` read-position on the
- * buffer is checked every frame; only when it advances (indicating new samples
- * are available) are up to 960 interleaved stereo samples extracted starting at
- * the read-head position and fed to `updateFromPcm()`, guaranteeing the
- * waveform updates every frame fresh audio arrives with no missed frames or
- * stale data.  When no audio source is attached, `update()` can be called
+ * `ProximityAudioManager.getAudioBuffer()`.  Every frame, up to 960
+ * interleaved stereo samples are copied from `asSample` and fed to
+ * `updateFromPcm()` unconditionally, keeping the waveform continuously
+ * updated.  When no audio source is attached, `update()` can be called
  * directly with normalised L/R amplitude values for testing.
  */
 export class AudioVisualizer {
@@ -45,9 +43,6 @@ export class AudioVisualizer {
 
   // MVRP audio manager reference (set in attachAudioSource)
   private audioManager: ProximityAudioManager | null = null;
-
-  // Last observed nHead value; -1 means no frame has been processed yet
-  private lastProcessedHead: number = -1;
 
   // Current L/R amplitude levels (0–1) read from MVRP or set via update()
   private levelL: number = 0;
@@ -101,13 +96,10 @@ export class AudioVisualizer {
   /**
    * Wire the visualizer into the live audio stream managed by `audioManager`.
    *
-   * Each animation frame the loop reads `getAudioBuffer()` and checks the
-   * `nHead` read position.  When `nHead` advances (new samples are available)
-   * and the buffer is non-empty, up to 960 interleaved stereo samples are
-   * extracted from `asSample` starting at the read-head position and fed to
-   * `updateFromPcm()` so the waveform reflects the audio currently being
-   * played.  `drawFrame()` is called every tick regardless to keep the
-   * display smooth.
+   * Each animation frame the loop reads `getAudioBuffer()` and copies up to
+   * 960 interleaved stereo samples from `asSample` into `updateFromPcm()`
+   * unconditionally, so the waveform is refreshed every frame.
+   * `drawFrame()` is called every tick regardless to keep the display smooth.
    *
    * Starts the requestAnimationFrame draw loop automatically.
    * Idempotent: subsequent calls have no effect while a source is already
@@ -202,7 +194,6 @@ export class AudioVisualizer {
     this.stopLoop();
 
     this.audioManager = null;
-    this.lastProcessedHead = -1;
 
     if (this.canvas.parentNode) {
       this.canvas.parentNode.removeChild(this.canvas);
@@ -220,29 +211,18 @@ export class AudioVisualizer {
     const tick = () => {
       this.animFrameId = requestAnimationFrame(tick);
 
-      // Sample directly from MVRP's live decoded PCM buffer.
-      // Only process when nHead advances (new samples are available).
+      // Sample directly from MVRP's live decoded PCM buffer every frame.
       const buf = this.audioManager?.getAudioBuffer();
       if (buf?.asSample) {
-        const head = (buf.nHead as number) ?? 0;
-        const tail = (buf.nTail as number) ?? 0;
-        const length = (buf.asSample as number[]).length;
+        const asSample = buf.asSample as number[];
+        const length = asSample.length;
+        const count = Math.min(MAX_SAMPLES, length);
 
-        // Process only when head has moved and the buffer is non-empty (tail !== head means data exists)
-        if (head !== this.lastProcessedHead && tail !== head) {
-          this.lastProcessedHead = head;
-
-          const nCount = (buf.nCount as number) ?? MAX_SAMPLES;
-          const count = Math.min(MAX_SAMPLES, nCount, length);
-
-          if (count > 0) {
-            // Extract samples starting from read head position
-            const asSample = buf.asSample as number[];
-            for (let i = 0; i < count; i++) {
-              this.pcmChunk[i] = asSample[(head + i) % length] ?? 0;
-            }
-            this.updateFromPcm(this.pcmChunk.subarray(0, count), 2, false);
+        if (count > 0) {
+          for (let i = 0; i < count; i++) {
+            this.pcmChunk[i] = asSample[i] ?? 0;
           }
+          this.updateFromPcm(this.pcmChunk.subarray(0, count), 2, false);
         }
       }
 
