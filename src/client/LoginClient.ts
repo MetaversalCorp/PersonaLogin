@@ -243,6 +243,11 @@ export class LoginClient {
       void this.handleLogout();
     });
 
+    // Single teleport button
+    this.el("teleport-now-button")?.addEventListener("click", () => {
+      this.handleTeleport();
+    });
+
     // Avatar update toggle button
     this.el("teleport-button")?.addEventListener("click", () => {
       this.handleAvatarUpdateToggle();
@@ -260,6 +265,14 @@ export class LoginClient {
     });
     this.el("lon-incr")?.addEventListener("click", () => {
       this.adjustLatLon("teleport-longitude", 0.001);
+    });
+
+    // Radius fine-tuning increment/decrement buttons (±1.0 m)
+    this.el("radius-decr")?.addEventListener("click", () => {
+      this.adjustLatLon("teleport-radius", -1.0);
+    });
+    this.el("radius-incr")?.addEventListener("click", () => {
+      this.adjustLatLon("teleport-radius", 1.0);
     });
 
     // Location presets
