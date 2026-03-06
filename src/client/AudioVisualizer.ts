@@ -1,4 +1,5 @@
 import type { ProximityAudioManager } from '../audio/ProximityAudioManager.js';
+import { AudioFrameCapture } from '../audio/AudioFrameCapture.js';
 
 /** Options for configuring the AudioVisualizer. */
 export interface VisualizerOptions {
@@ -27,11 +28,10 @@ export interface VisualizerOptions {
  *   …avatar is active…
  *   vis.dispose();                                  // stops loop, removes canvas
  *
- * Audio levels are sampled each animation frame by reading time-domain data
- * directly from an {@link AnalyserNode} tapped into {@link AudioContext.destination},
- * capturing all MVRP decoded audio output in real time.  Every frame,
- * `getFloatTimeDomainData()` is called and the result is fed to `updateFromPcm()`,
- * keeping the waveform continuously updated without silence gaps.
+ * Audio levels are sampled each animation frame by reading PCM data from an
+ * {@link AudioFrameCapture} that taps the MVRP audio stream.  The first
+ * {@link FRAME_SKIP_THRESHOLD} frames are discarded to allow the capture buffer
+ * to fill with real audio before samples are fed to `updateFromPcm()`.
  * When no audio source is attached, `update()` can be called directly with
  * normalised L/R amplitude values for testing.
  */
@@ -44,10 +44,14 @@ export class AudioVisualizer {
   // MVRP audio manager reference (set in attachAudioSource)
   private audioManager: ProximityAudioManager | null = null;
 
-  // AnalyserNode tapped into AudioContext.destination to capture MVRP output
-  private analyserNode: AnalyserNode | null = null;
-  // Scratch buffer for getFloatTimeDomainData – sized to analyserNode.fftSize
-  private analyserBuffer: Float32Array | null = null;
+  // AudioFrameCapture tap used to read decoded PCM from the MVRP stream
+  private audioCapture: AudioFrameCapture | null = null;
+  // Scratch buffer for reading PCM samples from the audioCapture ring buffer
+  private readonly readBuffer: Float32Array = new Float32Array(960);
+
+  // Frame skip counter – discard the first N frames to let the buffer fill
+  private frameSkipCounter: number = 0;
+  private readonly FRAME_SKIP_THRESHOLD: number = 5; // Skip first 5 frames
 
   // Current L/R amplitude levels (0–1) read from MVRP or set via update()
   private levelL: number = 0;
@@ -98,11 +102,11 @@ export class AudioVisualizer {
   /**
    * Wire the visualizer into the live audio stream managed by `audioManager`.
    *
-   * Creates an {@link AnalyserNode} and connects it in parallel to
-   * {@link AudioContext.destination} to capture all MVRP decoded audio output.
-   * `getFloatTimeDomainData()` is called each animation frame to obtain
-   * real-time PCM samples, ensuring continuous waveform updates with no
-   * silence gaps.
+   * Creates an {@link AudioFrameCapture} and enables it to tap the MVRP audio
+   * stream, buffering decoded PCM samples for each animation frame.
+   * The frame skip counter discards the first {@link FRAME_SKIP_THRESHOLD}
+   * frames to allow the capture buffer to fill with real audio data before
+   * feeding samples to `updateFromPcm()`.
    *
    * Starts the requestAnimationFrame draw loop automatically.
    * Idempotent: subsequent calls have no effect while a source is already
@@ -119,16 +123,9 @@ export class AudioVisualizer {
 
     this.audioManager = audioManager;
 
-    // Create and connect AnalyserNode tap into AudioContext.destination
-    const ctx = audioManager.getAudioContext();
-    if (ctx) {
-      this.analyserNode = ctx.createAnalyser();
-      this.analyserNode.fftSize = 2048;
-      this.analyserBuffer = new Float32Array(this.analyserNode.fftSize);
-
-      // Insert AnalyserNode in parallel
-      this.analyserNode.connect(ctx.destination);
-    }
+    // Create and enable an AudioFrameCapture tap into the MVRP audio stream
+    this.audioCapture = new AudioFrameCapture(audioManager);
+    this.audioCapture.enable();
 
     this.startLoop();
     console.log('[AudioVisualizer] Attached to audio source; visualizer active');
@@ -207,11 +204,12 @@ export class AudioVisualizer {
    */
   dispose(): void {
     this.stopLoop();
+    this.frameSkipCounter = 0;
 
-    if (this.analyserNode) {
-      this.analyserNode.disconnect();
-      this.analyserNode = null;
-      this.analyserBuffer = null;
+    if (this.audioCapture) {
+      this.audioCapture.disable();
+      this.audioCapture.dispose();
+      this.audioCapture = null;
     }
 
     this.audioManager = null;
@@ -228,13 +226,23 @@ export class AudioVisualizer {
   private startLoop(): void {
     if (this.animFrameId !== null) return;
 
+    this.frameSkipCounter = 0; // Reset counter
+
     const tick = () => {
       this.animFrameId = requestAnimationFrame(tick);
 
-      // Read from AnalyserNode tapped into destination
-      if (this.analyserNode && this.analyserBuffer) {
-        this.analyserNode.getFloatTimeDomainData(this.analyserBuffer as any);
-        this.updateFromPcm(this.analyserBuffer, 2, false);
+      if (this.audioCapture) {
+        // Skip first N frames to allow buffer to fill with real data
+        if (this.frameSkipCounter < this.FRAME_SKIP_THRESHOLD) {
+          this.frameSkipCounter++;
+          // Still consume from buffer to advance pointers
+          this.audioCapture.buffer.read(this.readBuffer);
+        } else {
+          const n = this.audioCapture.buffer.read(this.readBuffer);
+          if (n > 0) {
+            this.updateFromPcm(this.readBuffer.subarray(0, n), 2, false);
+          }
+        }
       }
 
       this.drawFrame();
