@@ -29,13 +29,13 @@ export interface VisualizerOptions {
  *
  * Audio levels are sampled each animation frame by reading directly from
  * MVRP's live `m_Buffer.asSample` decoded PCM data via
- * `ProximityAudioManager.getAudioBuffer()`.  The `nSlice` counter on the
- * buffer is checked every frame; only when it changes (indicating MVRP has
- * decoded a new audio frame) are up to 960 interleaved stereo samples
- * extracted and fed to `updateFromPcm()`, guaranteeing the waveform always
- * reflects the freshest decoded audio with no timing mismatch.  When no
- * audio source is attached, `update()` can be called directly with
- * normalised L/R amplitude values for testing.
+ * `ProximityAudioManager.getAudioBuffer()`.  The `nHead` read-position on the
+ * buffer is checked every frame; only when it advances (indicating new samples
+ * are available) are up to 960 interleaved stereo samples extracted starting at
+ * the read-head position and fed to `updateFromPcm()`, guaranteeing the
+ * waveform updates every frame fresh audio arrives with no missed frames or
+ * stale data.  When no audio source is attached, `update()` can be called
+ * directly with normalised L/R amplitude values for testing.
  */
 export class AudioVisualizer {
   private readonly container: HTMLElement;
@@ -46,8 +46,8 @@ export class AudioVisualizer {
   // MVRP audio manager reference (set in attachAudioSource)
   private audioManager: ProximityAudioManager | null = null;
 
-  // Last observed nSlice value; -1 means no frame has been processed yet
-  private lastSlice: number = -1;
+  // Last observed nHead value; -1 means no frame has been processed yet
+  private lastProcessedHead: number = -1;
 
   // Current L/R amplitude levels (0–1) read from MVRP or set via update()
   private levelL: number = 0;
@@ -102,11 +102,12 @@ export class AudioVisualizer {
    * Wire the visualizer into the live audio stream managed by `audioManager`.
    *
    * Each animation frame the loop reads `getAudioBuffer()` and checks the
-   * `nSlice` counter.  When `nSlice` changes (MVRP has decoded a new audio
-   * frame), up to 960 interleaved stereo samples are extracted from
-   * `asSample` starting at position 0 and fed to `updateFromPcm()` so the
-   * waveform reflects the audio currently being played.  `drawFrame()` is
-   * called every tick regardless to keep the display smooth.
+   * `nHead` read position.  When `nHead` advances (new samples are available)
+   * and the buffer is non-empty, up to 960 interleaved stereo samples are
+   * extracted from `asSample` starting at the read-head position and fed to
+   * `updateFromPcm()` so the waveform reflects the audio currently being
+   * played.  `drawFrame()` is called every tick regardless to keep the
+   * display smooth.
    *
    * Starts the requestAnimationFrame draw loop automatically.
    * Idempotent: subsequent calls have no effect while a source is already
@@ -201,7 +202,7 @@ export class AudioVisualizer {
     this.stopLoop();
 
     this.audioManager = null;
-    this.lastSlice = -1;
+    this.lastProcessedHead = -1;
 
     if (this.canvas.parentNode) {
       this.canvas.parentNode.removeChild(this.canvas);
@@ -215,23 +216,33 @@ export class AudioVisualizer {
   private startLoop(): void {
     if (this.animFrameId !== null) return;
     // Maximum interleaved stereo samples (L+R) to read per decoded frame.
-    const SLICE_SAMPLES = 960;
+    const MAX_SAMPLES = 960;
     const tick = () => {
       this.animFrameId = requestAnimationFrame(tick);
 
       // Sample directly from MVRP's live decoded PCM buffer.
-      // Only process when nSlice changes to avoid feeding duplicate frames.
+      // Only process when nHead advances (new samples are available).
       const buf = this.audioManager?.getAudioBuffer();
-      if (buf?.asSample && typeof buf.nSlice === 'number' && buf.nSlice !== this.lastSlice) {
-        this.lastSlice = buf.nSlice;
-        const asSample = buf.asSample as ArrayLike<number>;
-        const nCount = typeof buf.nCount === 'number' ? buf.nCount : asSample.length;
-        const count = Math.min(SLICE_SAMPLES, nCount);
-        if (count > 0) {
-          for (let i = 0; i < count; i++) {
-            this.pcmChunk[i] = (asSample[i] as number) ?? 0;
+      if (buf?.asSample) {
+        const head = (buf.nHead as number) ?? 0;
+        const tail = (buf.nTail as number) ?? 0;
+        const length = (buf.asSample as number[]).length;
+
+        // Process only when head has moved and the buffer is non-empty (tail !== head means data exists)
+        if (head !== this.lastProcessedHead && tail !== head) {
+          this.lastProcessedHead = head;
+
+          const nCount = (buf.nCount as number) ?? MAX_SAMPLES;
+          const count = Math.min(MAX_SAMPLES, nCount, length);
+
+          if (count > 0) {
+            // Extract samples starting from read head position
+            const asSample = buf.asSample as number[];
+            for (let i = 0; i < count; i++) {
+              this.pcmChunk[i] = asSample[(head + i) % length] ?? 0;
+            }
+            this.updateFromPcm(this.pcmChunk.subarray(0, count), 2, false);
           }
-          this.updateFromPcm(this.pcmChunk.subarray(0, count), 2, false);
         }
       }
 
