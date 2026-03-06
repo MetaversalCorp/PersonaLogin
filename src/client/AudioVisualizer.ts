@@ -213,17 +213,13 @@ export class AudioVisualizer {
 
       // Sample directly from MVRP's live decoded PCM buffer every frame.
       const buf = this.audioManager?.getAudioBuffer();
-      if (buf?.asSample) {
+      if (buf?.asSample && buf.asSample.length > 0) {
         const asSample = buf.asSample as number[];
-        const length = asSample.length;
-        const count = Math.min(MAX_SAMPLES, length);
-
-        if (count > 0) {
-          for (let i = 0; i < count; i++) {
-            this.pcmChunk[i] = asSample[i] ?? 0;
-          }
-          this.updateFromPcm(this.pcmChunk.subarray(0, count), 2, false);
+        const count = Math.min(MAX_SAMPLES, asSample.length);
+        for (let i = 0; i < count; i++) {
+          this.pcmChunk[i] = asSample[i] ?? 0;
         }
+        this.updateFromPcm(this.pcmChunk.subarray(0, count), 2, false);
       }
 
       this.drawFrame();
