@@ -1,5 +1,4 @@
 import type { ProximityAudioManager } from '../audio/ProximityAudioManager.js';
-import { AudioFrameCapture } from '../audio/AudioFrameCapture.js';
 
 /** Options for configuring the AudioVisualizer. */
 export interface VisualizerOptions {
@@ -28,11 +27,11 @@ export interface VisualizerOptions {
  *   …avatar is active…
  *   vis.dispose();                                  // stops loop, removes canvas
  *
- * Audio levels are sampled each animation frame by reading from an
- * {@link AudioFrameCapture} instance that taps an AnalyserNode into the live
- * Web Audio API playback chain, producing real decoded PCM data.  Every frame,
- * up to 960 interleaved stereo samples are read from the capture ring buffer
- * and fed to `updateFromPcm()`, keeping the waveform continuously updated.
+ * Audio levels are sampled each animation frame by reading time-domain data
+ * directly from an {@link AnalyserNode} tapped into {@link AudioContext.destination},
+ * capturing all MVRP decoded audio output in real time.  Every frame,
+ * `getFloatTimeDomainData()` is called and the result is fed to `updateFromPcm()`,
+ * keeping the waveform continuously updated without silence gaps.
  * When no audio source is attached, `update()` can be called directly with
  * normalised L/R amplitude values for testing.
  */
@@ -45,8 +44,10 @@ export class AudioVisualizer {
   // MVRP audio manager reference (set in attachAudioSource)
   private audioManager: ProximityAudioManager | null = null;
 
-  // AudioFrameCapture instance that taps the live audio stream (set in attachAudioSource)
-  private audioCapture: AudioFrameCapture | null = null;
+  // AnalyserNode tapped into AudioContext.destination to capture MVRP output
+  private analyserNode: AnalyserNode | null = null;
+  // Scratch buffer for getFloatTimeDomainData – sized to analyserNode.fftSize
+  private analyserBuffer: Float32Array | null = null;
 
   // Current L/R amplitude levels (0–1) read from MVRP or set via update()
   private levelL: number = 0;
@@ -97,10 +98,11 @@ export class AudioVisualizer {
   /**
    * Wire the visualizer into the live audio stream managed by `audioManager`.
    *
-   * Creates an {@link AudioFrameCapture} that taps an AnalyserNode into the
-   * Web Audio API playback chain and starts reading real decoded PCM samples
-   * each animation frame.  `drawFrame()` is called every tick regardless to
-   * keep the display smooth.
+   * Creates an {@link AnalyserNode} and connects it in parallel to
+   * {@link AudioContext.destination} to capture all MVRP decoded audio output.
+   * `getFloatTimeDomainData()` is called each animation frame to obtain
+   * real-time PCM samples, ensuring continuous waveform updates with no
+   * silence gaps.
    *
    * Starts the requestAnimationFrame draw loop automatically.
    * Idempotent: subsequent calls have no effect while a source is already
@@ -116,8 +118,18 @@ export class AudioVisualizer {
     }
 
     this.audioManager = audioManager;
-    this.audioCapture = new AudioFrameCapture(audioManager);
-    this.audioCapture.enable();
+
+    // Create and connect AnalyserNode tap into AudioContext.destination
+    const ctx = audioManager.getAudioContext();
+    if (ctx) {
+      this.analyserNode = ctx.createAnalyser();
+      this.analyserNode.fftSize = 2048;
+      this.analyserBuffer = new Float32Array(this.analyserNode.fftSize);
+
+      // Insert AnalyserNode in parallel
+      this.analyserNode.connect(ctx.destination);
+    }
+
     this.startLoop();
     console.log('[AudioVisualizer] Attached to audio source; visualizer active');
   }
@@ -196,10 +208,10 @@ export class AudioVisualizer {
   dispose(): void {
     this.stopLoop();
 
-    if (this.audioCapture) {
-      this.audioCapture.disable();
-      this.audioCapture.dispose();
-      this.audioCapture = null;
+    if (this.analyserNode) {
+      this.analyserNode.disconnect();
+      this.analyserNode = null;
+      this.analyserBuffer = null;
     }
 
     this.audioManager = null;
@@ -215,23 +227,19 @@ export class AudioVisualizer {
 
   private startLoop(): void {
     if (this.animFrameId !== null) return;
-    // Maximum interleaved stereo samples (L+R) to read per decoded frame.
-    const MAX_SAMPLES = 960;
-    const readBuffer = new Float32Array(MAX_SAMPLES);
 
     const tick = () => {
       this.animFrameId = requestAnimationFrame(tick);
 
-      // Read from AudioFrameCapture buffer (real audio data via AnalyserNode tap).
-      if (this.audioCapture) {
-        const n = this.audioCapture.buffer.read(readBuffer);
-        if (n > 0) {
-          this.updateFromPcm(readBuffer.subarray(0, n), 2, false);
-        }
+      // Read from AnalyserNode tapped into destination
+      if (this.analyserNode && this.analyserBuffer) {
+        this.analyserNode.getFloatTimeDomainData(this.analyserBuffer as any);
+        this.updateFromPcm(this.analyserBuffer, 2, false);
       }
 
       this.drawFrame();
     };
+
     this.animFrameId = requestAnimationFrame(tick);
   }
 
