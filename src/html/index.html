@@ -831,12 +831,6 @@
                </div>
             </div>
 
-            <div style="margin-top: 12px;">
-               <button type="button" class="btn btn-sm btn-outline-primary w-100" id="avatar-update-btn">
-                  <i class="fa-solid fa-rotate"></i> Start Avatar Updates
-               </button>
-            </div>
-
                </div><!-- /.teleport-controls-col -->
 
                <!-- Right column: audio waveform visualizer + capture controls -->
@@ -1031,30 +1025,6 @@
             observer.observe(sessionSection, { attributes: true, attributeFilter: ['class'] });
          }
 
-         // ── Avatar Update Toggle ─────────────────────────────────────────────
-         const avatarUpdateBtn = document.getElementById('avatar-update-btn');
-         let avatarUpdateInterval = null;
-
-         avatarUpdateBtn?.addEventListener('click', () => {
-            if (avatarUpdateInterval === null) {
-               // OFF → ON: start 64 Hz update loop
-               avatarUpdateInterval = setInterval(() => {
-                  const celestialId = document.getElementById('celestial-id')?.value || '104';
-                  const puppet = loginClient.session?.personaSession?.inWorld?.avatar;
-                  puppet?.sendUpdate(celestialId);
-               }, 1000 / 64);
-               avatarUpdateBtn.classList.remove('btn-outline-primary');
-               avatarUpdateBtn.classList.add('btn-primary');
-               avatarUpdateBtn.innerHTML = '<i class="fa-solid fa-rotate fa-spin"></i> Avatar Updates Sending Active';
-            } else {
-               // ON → OFF: stop update loop
-               clearInterval(avatarUpdateInterval);
-               avatarUpdateInterval = null;
-               avatarUpdateBtn.classList.remove('btn-primary');
-               avatarUpdateBtn.classList.add('btn-outline-primary');
-               avatarUpdateBtn.innerHTML = '<i class="fa-solid fa-rotate"></i> Start Avatar Updates';
-            }
-         });
       });
    </script>
 
