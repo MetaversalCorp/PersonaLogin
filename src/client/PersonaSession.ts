@@ -61,6 +61,23 @@ export class PersonaSession extends Session {
   private _firstName: string | undefined;
   private _lastName: string | undefined;
 
+  // ─── Avatar update state ──────────────────────────────────────────────────
+
+  /** Whether a periodic avatar update cycle is currently active. */
+  private _avatarUpdateActive = false;
+
+  /** Tracks whether an avatar update is pending (in-progress or queued). */
+  private avatarUpdatePending = false;
+
+  /** Callback provided by the caller for each avatar update tick. */
+  private _onAvatarUpdate: (() => void) | null = null;
+
+  /** Timestamp of the last avatar update send; used to throttle MVRP ticks to ~64 Hz. */
+  private _lastAvatarUpdateTime = 0;
+
+  /** Minimum interval (ms) between avatar updates (~64 Hz, matching RP1 demo update rate). */
+  private static readonly AVATAR_UPDATE_INTERVAL_MS = 16;
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   constructor(personaId: string, pLnG: any, pRUser: any, firstName?: string, lastName?: string) {
     super();
@@ -200,7 +217,63 @@ export class PersonaSession extends Session {
     return this.inWorldSession;
   }
 
+  // ─── MVRP tick handler ────────────────────────────────────────────────────
+
+  /**
+   * Called by MVRP on each internal tick when this session is attached via
+   * `pRPersona.Attach(this)`. Fires avatar updates inside the MVRP event loop
+   * so that Send() calls are accepted by the state machine. Updates are
+   * throttled to ~64 Hz (every 16 ms) to avoid flooding the server.
+   */
+  public onNotice(): void {
+    if (!this._avatarUpdateActive || !this._onAvatarUpdate) return;
+    const now = Date.now();
+    if (now - this._lastAvatarUpdateTime < PersonaSession.AVATAR_UPDATE_INTERVAL_MS) return;
+    this._lastAvatarUpdateTime = now;
+    this.avatarUpdatePending = true;
+    try {
+      this._onAvatarUpdate();
+    } catch (err) {
+      console.error('[PersonaSession] Avatar update error in onNotice:', err);
+    } finally {
+      this.avatarUpdatePending = false;
+    }
+  }
+
+  /**
+   * Enable periodic avatar updates driven by MVRP's onNotice() tick.
+   * @param callback - Called on every MVRP tick while updates are active (throttled to ~64 Hz).
+   */
+  public startAvatarUpdates(callback: () => void): void {
+    this._onAvatarUpdate = callback;
+    this._avatarUpdateActive = true;
+    this._lastAvatarUpdateTime = 0;
+    this.avatarUpdatePending = false;
+    console.log('[PersonaSession] Avatar updates started (MVRP-driven)');
+  }
+
+  /** Stop periodic avatar updates. */
+  public stopAvatarUpdates(): void {
+    this._avatarUpdateActive = false;
+    this._onAvatarUpdate = null;
+    this.avatarUpdatePending = false;
+    console.log('[PersonaSession] Avatar updates stopped');
+  }
+
+  /**
+   * Queue an immediate avatar update to fire on the next eligible MVRP tick,
+   * bypassing the normal throttle interval. Has no effect if avatar updates
+   * are not currently active.
+   */
+  public triggerAvatarUpdate(): void {
+    if (!this._avatarUpdateActive) return;
+    this._lastAvatarUpdateTime = 0; // Reset timer so next onNotice() fires immediately
+    this.avatarUpdatePending = true;
+  }
+
   async disconnect(): Promise<void> {
+    this.stopAvatarUpdates();
+
     if (this.inWorldSession) {
       await this.inWorldSession.disconnect();
       this.inWorldSession = null;

@@ -15,9 +15,6 @@ export interface LoginCredentials {
 /** Time (ms) to wait for the RUser model's onReadyState + Child_Enum to complete. */
 const PERSONA_ENUM_WAIT_MS = 500;
 
-/** Interval between avatar position updates when the 64 Hz update loop is active (1000 / 64 ≈ 15.625 ms). */
-const AVATAR_UPDATE_INTERVAL_MS = 15.625;
-
 /**
  * LoginClient — drives the RP1 login UI in index.html.
  *
@@ -39,7 +36,6 @@ export class LoginClient {
   private userSession: UserSession | null = null;
   private pendingUser: LnGUser | null = null;
   private avatarUpdateActive = false;
-  private avatarUpdateInterval: number | null = null;
 
   constructor(_container: HTMLElement) {
     this._pLnG = createLnGClient();
@@ -405,10 +401,6 @@ export class LoginClient {
   }
 
   private async handleLogout(): Promise<void> {
-    if (this.avatarUpdateInterval !== null) {
-      clearInterval(this.avatarUpdateInterval);
-      this.avatarUpdateInterval = null;
-    }
     this.avatarUpdateActive = false;
     const btn = this.el<HTMLButtonElement>("teleport-button");
     if (btn) {
@@ -466,22 +458,19 @@ export class LoginClient {
         btn.innerHTML = '<i class="fa-solid fa-satellite-dish"></i> Avatar Updates Sending Active';
         btn.classList.add("active");
       }
-      this.avatarUpdateInterval = window.setInterval(() => {
+      this.userSession?.personaSession?.startAvatarUpdates(() => {
         try {
           this.sendAvatarUpdate();
         } catch (err) {
           console.error('[LoginClient] sendAvatarUpdate error:', err);
         }
-      }, AVATAR_UPDATE_INTERVAL_MS);
+      });
     } else {
       if (btn) {
         btn.innerHTML = '<i class="fa-solid fa-satellite-dish"></i> Start Avatar Updates';
         btn.classList.remove("active");
       }
-      if (this.avatarUpdateInterval !== null) {
-        clearInterval(this.avatarUpdateInterval);
-        this.avatarUpdateInterval = null;
-      }
+      this.userSession?.personaSession?.stopAvatarUpdates();
     }
   }
 
