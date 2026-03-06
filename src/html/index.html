@@ -541,7 +541,7 @@
       .lat-lon-controls {
          display: flex;
          align-items: center;
-         gap: 8px;
+         gap: 0;
       }
 
       .lat-lon-controls input {
@@ -651,7 +651,7 @@
                         <div class="card-footer d-flex gap-3 d-md-flex justify-content-end">
                            <button class="btn btn-outline-dark" id="guest-cancel-button" type="button"
                               tabindex="3">Back</button>
-                           <button class="btn btn-primary" id="guest-join-button" type="submit" tabindex="2">Join
+                           <button class="btn btn-secondary" id="guest-join-button" type="submit" tabindex="2">Join
                               World</button>
                         </div>
                      </form>
@@ -700,7 +700,7 @@
                            <div class="d-flex flex-wrap gap-3">
                               <button class="btn btn-outline-dark" id="forgot-button" type="button"
                                  tabindex="5">Forgot</button>
-                              <button class="btn btn-primary" id="login-button" type="submit" tabindex="4">Log
+                              <button class="btn btn-secondary" id="login-button" type="submit" tabindex="4">Log
                                  In</button>
                            </div>
                         </div>
@@ -761,7 +761,7 @@
                            </div>
                         </div>
                         <div class="card-footer d-flex gap-3 justify-content-end">
-                           <button class="btn btn-primary" id="tfa-confirm-button" type="submit"
+                           <button class="btn btn-secondary" id="tfa-confirm-button" type="submit"
                               tabindex="2">Confirm</button>
                         </div>
                      </form>
@@ -867,9 +867,9 @@
                   <div class="stt-panel" id="stt-panel" style="display:none;">
                      <h6><i class="fa-solid fa-wave-square"></i> Inbound Audio Capture</h6>
                      <div class="stt-controls">
-                        <button class="btn btn-sm btn-outline-info"  id="stt-enable-btn">Enable Capture</button>
+                        <button class="btn btn-sm btn-outline-secondary"  id="stt-enable-btn">Enable Capture</button>
                         <button class="btn btn-sm btn-outline-secondary" id="stt-disable-btn" disabled>Disable Capture</button>
-                        <button class="btn btn-sm btn-outline-warning" id="stt-clear-btn">Clear Buffer</button>
+                        <button class="btn btn-sm btn-outline-secondary" id="stt-clear-btn">Clear Buffer</button>
                      </div>
                      <div class="stt-status">
                         Status: <span id="stt-status-text">Inactive</span>
