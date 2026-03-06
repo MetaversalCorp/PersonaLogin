@@ -58,7 +58,7 @@ export class InWorldSession extends Session {
     }
 
     // Open the Time model and attach for periodic tick notifications.
-    // pTime sends onNotice() callbacks on every internal tick, which we use to
+    // pTime sends onTick() callbacks on every internal tick, which we use to
     // drive throttled avatar-position updates (replacing the non-ticking pRPersona).
     const pClient = pLnG?.pClient ?? null;
     this.pTime = pClient?.Time_Open?.() ?? null;
@@ -97,15 +97,18 @@ export class InWorldSession extends Session {
 
   /**
    * Called by pTime on each internal tick when this session is attached via
-   * `pTime.Attach(this)`. Delegates to PersonaSession's onNotice() handler
+   * `pTime.Attach(this)`. Delegates to PersonaSession's onTick() handler
    * so avatar-update callbacks fire within the MVRP event loop (not from
    * setInterval or manual calls).
    */
-  public onNotice(): void {
+  private lastServerTime = 0;
+
+  onTick(pNotice: any): void {
+    this.lastServerTime = pNotice.pData.tmServer;
     try {
-      this.personaSession.onNotice();
+      this.personaSession.onTick();
     } catch (err) {
-      console.error('[InWorldSession] onNotice delegation error:', err);
+      console.error('[InWorldSession] onTick delegation error:', err);
     }
   }
 
@@ -121,7 +124,8 @@ export class InWorldSession extends Session {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const pRPersona = this.personaSession.pRPersona as any;
 
-      const tmStamp: number = typeof pRPersona.pTime === 'number' ? pRPersona.pTime : Date.now();
+      //const tmStamp: number = typeof pRPersona.pTime === 'number' ? pRPersona.pTime : Date.now();
+      const tmStamp: number = this.lastServerTime || Date.now();
       const updatePayload = {
         tmStamp,
         pState: {

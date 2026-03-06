@@ -225,7 +225,7 @@ export class PersonaSession extends Session {
    * so that Send() calls are accepted by the state machine. Updates are
    * throttled to ~64 Hz (every 16 ms) to avoid flooding the server.
    */
-  public onNotice(): void {
+  public onTick(): void {
     if (!this._avatarUpdateActive || !this._onAvatarUpdate) return;
     const now = Date.now();
     if (now - this.lastAvatarUpdateTick < this.avatarUpdateIntervalMs) return;
@@ -234,18 +234,18 @@ export class PersonaSession extends Session {
     try {
       this._onAvatarUpdate();
     } catch (err) {
-      console.error('[PersonaSession] Avatar update error in onNotice:', err);
+      console.error('[PersonaSession] Avatar update error in onTick:', err);
     } finally {
       this.avatarUpdatePending = false;
     }
   }
 
   /**
-   * Register (or clear) the avatar-update callback driven by pTime's onNotice() tick.
+   * Register (or clear) the avatar-update callback driven by pTime's onTick() tick.
    * Passing `null` deactivates updates (equivalent to stopAvatarUpdates()).
    *
-   * When a non-null callback is set, `PersonaSession.onNotice()` (invoked by
-   * `InWorldSession.onNotice()` on each pTime tick) will call the callback
+   * When a non-null callback is set, `PersonaSession.onTick()` (invoked by
+   * `InWorldSession.onTick()` on each pTime tick) will call the callback
    * once per throttle interval (~64 Hz / every 15.625 ms).
    *
    * @param callback - Called on every pTime tick while updates are active (throttled to ~64 Hz),
@@ -264,7 +264,7 @@ export class PersonaSession extends Session {
   }
 
   /**
-   * Enable periodic avatar updates driven by MVRP's onNotice() tick.
+   * Enable periodic avatar updates driven by MVRP's onTick() tick.
    * @param callback - Called on every MVRP tick while updates are active (throttled to ~64 Hz).
    */
   public startAvatarUpdates(callback: () => void): void {
@@ -290,7 +290,7 @@ export class PersonaSession extends Session {
    */
   public triggerAvatarUpdate(): void {
     if (!this._avatarUpdateActive) return;
-    this.lastAvatarUpdateTick = 0; // Reset timer so next onNotice() fires immediately
+    this.lastAvatarUpdateTick = 0; // Reset timer so next onTick() fires immediately
     this.avatarUpdatePending = true;
   }
 
