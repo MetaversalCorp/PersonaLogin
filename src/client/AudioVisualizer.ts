@@ -11,8 +11,14 @@ export interface VisualizerOptions {
 }
 
 /**
- * AudioVisualizer – renders real-time dual-channel (L/R) amplitude meters on
- * an HTML5 canvas element placed inside the supplied container.
+ * AudioVisualizer – renders a real-time dual-channel (L/R) looping time-series
+ * waveform on an HTML5 canvas element placed inside the supplied container.
+ *
+ * The canvas is 280 × 240 px: the top 120 px show the left-channel waveform
+ * (cyan) and the bottom 120 px show the right-channel waveform (magenta).
+ * Each horizontal pixel corresponds to one amplitude sample stored in a
+ * 280-sample circular buffer, producing a continuously scrolling display
+ * similar to an oscilloscope or Audacity waveform view.
  *
  * Lifecycle
  * ─────────
@@ -40,6 +46,18 @@ export class AudioVisualizer {
 
   // requestAnimationFrame handle
   private animFrameId: number | null = null;
+
+  // ─── Rolling sample buffers ──────────────────────────────────────────────────
+
+  // Number of samples kept (one per canvas pixel width)
+  private static readonly BUFFER_SIZE = 280;
+
+  // Circular buffers for L/R channel amplitude samples (values in 0–1)
+  private readonly sampleBufferL: Float32Array = new Float32Array(AudioVisualizer.BUFFER_SIZE);
+  private readonly sampleBufferR: Float32Array = new Float32Array(AudioVisualizer.BUFFER_SIZE);
+
+  // Write cursor; the oldest sample lives at this index
+  private bufferIndex: number = 0;
 
   // ─── Constructor ────────────────────────────────────────────────────────────
 
@@ -104,6 +122,7 @@ export class AudioVisualizer {
   update(levelL: number, levelR: number): void {
     this.levelL = Math.max(0, Math.min(1, levelL));
     this.levelR = Math.max(0, Math.min(1, levelR));
+    this.pushSample(this.levelL, this.levelR);
     this.drawFrame();
   }
 
@@ -155,6 +174,7 @@ export class AudioVisualizer {
 
     // Ensure the animation loop is running even when no audio source has been
     // attached via attachAudioSource().
+    this.pushSample(this.levelL, this.levelR);
     if (this.animFrameId === null) {
       this.startLoop();
     } else {
@@ -195,6 +215,7 @@ export class AudioVisualizer {
           this.levelR = this.normalizeLevel(asLevel[1] ?? 0);
         }
       }
+      this.pushSample(this.levelL, this.levelR);
       this.drawFrame();
     };
     this.animFrameId = requestAnimationFrame(tick);
@@ -218,57 +239,62 @@ export class AudioVisualizer {
     return Math.min(Math.abs(value) / 0.1, 1);
   }
 
+  /**
+   * Write the current L/R levels into the circular sample buffers and advance
+   * the write cursor, overwriting the oldest sample when the buffer is full.
+   */
+  private pushSample(l: number, r: number): void {
+    this.sampleBufferL[this.bufferIndex] = l;
+    this.sampleBufferR[this.bufferIndex] = r;
+    this.bufferIndex = (this.bufferIndex + 1) % AudioVisualizer.BUFFER_SIZE;
+  }
+
   private drawFrame(): void {
     const { width, height } = this.canvas;
     const c = this.ctx2d;
+    const halfH = height / 2;
 
     // Background
     c.fillStyle = this.opts.backgroundColor;
     c.fillRect(0, 0, width, height);
 
-    // Two equal-width bars with padding on the sides and a gap between
-    const padX = Math.round(width * 0.1);
-    const gap = Math.round(width * 0.08);
-    const barW = Math.round((width - padX * 2 - gap) / 2);
-    const padY = Math.round(height * 0.05);
-    const barAreaH = height - padY * 2;
-
-    this.drawAmplitudeBar(this.levelL, padX, padY, barW, barAreaH, this.opts.colorLeft);
-    this.drawAmplitudeBar(this.levelR, padX + barW + gap, padY, barW, barAreaH, this.opts.colorRight);
+    // Left channel (top half) and right channel (bottom half)
+    this.drawWaveform(this.sampleBufferL, 0, halfH, this.opts.colorLeft);
+    this.drawWaveform(this.sampleBufferR, halfH, halfH, this.opts.colorRight);
   }
 
   /**
-   * Render a single vertical amplitude bar.
+   * Render one channel's circular sample buffer as a looping time-series
+   * waveform.  For each x-pixel the amplitude is drawn as a vertical line
+   * centred in `areaH`, so silence produces a thin centre line and full
+   * amplitude spans the entire half-canvas.
    *
-   * @param amplitude  Normalised amplitude in the range 0–1.
-   * @param x          Left edge of the bar (canvas-space).
-   * @param y          Top edge of the bar area (canvas-space).
-   * @param barW       Width of the bar in pixels.
-   * @param barAreaH   Total height of the bar area in pixels.
-   * @param color      Fill colour for the bar.
+   * @param buffer  Circular buffer of amplitude samples (0–1).
+   * @param yTop    Top edge of the channel's drawing area (canvas-space).
+   * @param areaH   Height of the channel's drawing area in pixels.
+   * @param color   Stroke colour.
    */
-  private drawAmplitudeBar(
-    amplitude: number,
-    x: number,
-    y: number,
-    barW: number,
-    barAreaH: number,
-    color: string,
-  ): void {
+  private drawWaveform(buffer: Float32Array, yTop: number, areaH: number, color: string): void {
     const c = this.ctx2d;
+    const n = AudioVisualizer.BUFFER_SIZE;
+    const centerY = yTop + areaH / 2;
+    const halfAreaH = areaH / 2;
 
-    // Dim background track
-    c.fillStyle = 'rgba(255,255,255,0.05)';
-    c.fillRect(x, y, barW, barAreaH);
+    c.strokeStyle = color;
+    c.lineWidth = 1;
 
-    const fillH = Math.round(Math.min(amplitude, 1) * barAreaH);
-    if (fillH > 0) {
-      // Gradient from base colour at the bottom to near-white at the top
-      const grad = c.createLinearGradient(0, y + barAreaH, 0, y);
-      grad.addColorStop(0, color);
-      grad.addColorStop(1, 'rgba(255,255,255,0.85)');
-      c.fillStyle = grad;
-      c.fillRect(x, y + barAreaH - fillH, barW, fillH);
+    // Build all line segments in a single path to minimise draw calls.
+    c.beginPath();
+    for (let x = 0; x < n; x++) {
+      // bufferIndex is the oldest sample; walk forward from there so the
+      // waveform scrolls left-to-right with the most recent sample on the right.
+      const sampleIdx = (this.bufferIndex + x) % n;
+      const amp = buffer[sampleIdx] ?? 0;
+      const lineH = amp * halfAreaH;
+
+      c.moveTo(x, centerY - lineH);
+      c.lineTo(x, centerY + lineH);
     }
+    c.stroke();
   }
 }
