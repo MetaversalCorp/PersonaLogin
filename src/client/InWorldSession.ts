@@ -16,6 +16,8 @@ export class InWorldSession extends Session {
   readonly personaSession: PersonaSession;
   private audioManager: ProximityAudioManager | null = null;
   private visualizer: AudioVisualizer | null = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private pTime: any = null;
 
   constructor(personaInfo: PersonaInfo, personaSession: PersonaSession) {
     super();
@@ -55,10 +57,27 @@ export class InWorldSession extends Session {
       console.warn('[InWorldSession] pLnGClient unavailable; proximity audio disabled');
     }
 
+    // Open the Time model and attach for periodic tick notifications.
+    // pTime sends onNotice() callbacks on every internal tick, which we use to
+    // drive throttled avatar-position updates (replacing the non-ticking pRPersona).
+    const pClient = pLnG?.pClient ?? null;
+    this.pTime = pClient?.Time_Open?.() ?? null;
+    if (this.pTime) {
+      this.pTime.Attach(this);
+      console.log('[InWorldSession] pTime opened and attached for tick-driven avatar updates');
+    } else {
+      console.warn('[InWorldSession] pTime unavailable; avatar updates will not fire');
+    }
+
     this.setState(ConnectionState.InWorld);
   }
 
   async disconnect(): Promise<void> {
+    if (this.pTime) {
+      this.pTime.Detach(this);
+      this.pTime = null;
+    }
+
     if (this.visualizer) {
       this.visualizer.dispose();
       this.visualizer = null;
@@ -74,6 +93,20 @@ export class InWorldSession extends Session {
       this.puppet = null;
     }
     this.setState(ConnectionState.Disconnected);
+  }
+
+  /**
+   * Called by pTime on each internal tick when this session is attached via
+   * `pTime.Attach(this)`. Delegates to PersonaSession's onNotice() handler
+   * so avatar-update callbacks fire within the MVRP event loop (not from
+   * setInterval or manual calls).
+   */
+  public onNotice(): void {
+    try {
+      this.personaSession.onNotice();
+    } catch (err) {
+      console.error('[InWorldSession] onNotice delegation error:', err);
+    }
   }
 
   public teleportTo(celestialId: string, position: { x: number; y: number; z: number }): void {

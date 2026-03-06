@@ -241,6 +241,29 @@ export class PersonaSession extends Session {
   }
 
   /**
+   * Register (or clear) the avatar-update callback driven by pTime's onNotice() tick.
+   * Passing `null` deactivates updates (equivalent to stopAvatarUpdates()).
+   *
+   * When a non-null callback is set, `PersonaSession.onNotice()` (invoked by
+   * `InWorldSession.onNotice()` on each pTime tick) will call the callback
+   * once per throttle interval (~64 Hz / every 15.625 ms).
+   *
+   * @param callback - Called on every pTime tick while updates are active (throttled to ~64 Hz),
+   *                   or `null` to stop updates.
+   */
+  public setAvatarUpdateCallback(callback: (() => void) | null): void {
+    this._onAvatarUpdate = callback;
+    this._avatarUpdateActive = callback !== null;
+    if (callback) {
+      this.lastAvatarUpdateTick = 0;
+      this.avatarUpdatePending = false;
+      console.log('[PersonaSession] Avatar update callback registered (pTime-driven)');
+    } else {
+      console.log('[PersonaSession] Avatar update callback cleared');
+    }
+  }
+
+  /**
    * Enable periodic avatar updates driven by MVRP's onNotice() tick.
    * @param callback - Called on every MVRP tick while updates are active (throttled to ~64 Hz).
    */
