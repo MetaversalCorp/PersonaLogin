@@ -1,4 +1,3 @@
-import type { AVStreamAudioPlayer } from '../audio/AVStreamAudioPlayer.js';
 import type { ProximityAudioManager } from '../audio/ProximityAudioManager.js';
 
 /** Options for configuring the AudioVisualizer. */
@@ -28,9 +27,10 @@ export interface VisualizerOptions {
  *   …avatar is active…
  *   vis.dispose();                                  // stops loop, removes canvas
  *
- * Audio levels are sampled each animation frame via an AnalyserNode tapped
- * into the AVStreamAudioPlayer's GainNode.  `getFloatTimeDomainData()` is
- * called every frame to read the most recent decoded PCM samples, providing a
+ * Audio levels are sampled each animation frame by polling MVRP's decoded PCM
+ * buffer directly via `ProximityAudioManager.getAudioBuffer()`.  The `nSlice`
+ * counter is compared each frame; when it changes a fresh 960-sample chunk is
+ * extracted from `m_Buffer.asSample` and fed to `updateFromPcm()`, producing a
  * continuously responsive waveform display.  When no audio source is attached,
  * `update()` can be called directly with normalised L/R amplitude values for
  * testing.
@@ -44,12 +44,8 @@ export class AudioVisualizer {
   // MVRP audio manager reference (set in attachAudioSource)
   private audioManager: ProximityAudioManager | null = null;
 
-  // AnalyserNode tap into the AVStreamAudioPlayer's GainNode
-  private analyserNode: AnalyserNode | null = null;
-  private analyserBuffer: Float32Array<ArrayBuffer> | null = null;
-
-  // AVStreamAudioPlayer reference kept for disconnectTap() in dispose()
-  private audioPlayer: AVStreamAudioPlayer | null = null;
+  // Last observed nSlice counter; used to detect freshly decoded audio frames
+  private lastSlice: number = -1;
 
   // Current L/R amplitude levels (0–1) read from MVRP or set via update()
   private levelL: number = 0;
@@ -66,6 +62,9 @@ export class AudioVisualizer {
   // Circular buffers for L/R channel amplitude samples (values in 0–1)
   private readonly sampleBufferL: Float32Array = new Float32Array(AudioVisualizer.BUFFER_SIZE);
   private readonly sampleBufferR: Float32Array = new Float32Array(AudioVisualizer.BUFFER_SIZE);
+
+  // Reusable buffer for a single MVRP slice (960 interleaved L+R samples)
+  private readonly pcmChunk: Float32Array = new Float32Array(960);
 
   // Write cursor; the oldest sample lives at this index
   private bufferIndex: number = 0;
@@ -100,11 +99,11 @@ export class AudioVisualizer {
   /**
    * Wire the visualizer into the live audio stream managed by `audioManager`.
    *
-   * Creates an AnalyserNode (fftSize 2048) tapped into the
-   * AVStreamAudioPlayer's GainNode via `player.connectTap()`.  Each animation
-   * frame the loop calls `getFloatTimeDomainData()` on the AnalyserNode and
-   * feeds the result to `updateFromPcm()` so the waveform reflects the audio
-   * currently being played.
+   * Stores the manager reference so that the animation loop can poll
+   * `getAudioBuffer()` each frame.  Each time MVRP's `nSlice` counter advances
+   * (indicating a freshly decoded audio frame) a 960-sample chunk is read from
+   * `m_Buffer.asSample` and fed to `updateFromPcm()` so the waveform reflects
+   * the audio currently being played.
    *
    * Starts the requestAnimationFrame draw loop automatically.
    * Idempotent: subsequent calls have no effect while a source is already
@@ -117,16 +116,6 @@ export class AudioVisualizer {
     if (!proximity) {
       console.warn('[AudioVisualizer] Proximity not ready; call after ProximityAudioManager.start()');
       return;
-    }
-
-    const player = audioManager.getAudioPlayer();
-    if (player) {
-      const analyser = player.context.createAnalyser();
-      analyser.fftSize = 2048;
-      this.analyserNode = analyser;
-      this.analyserBuffer = new Float32Array(analyser.fftSize) as Float32Array<ArrayBuffer>;
-      this.audioPlayer = player;
-      player.connectTap(analyser);
     }
 
     this.audioManager = audioManager;
@@ -154,10 +143,8 @@ export class AudioVisualizer {
    * amplitude bars accordingly.  The animation loop is started automatically
    * if it is not already running.
    *
-   * This method provides a direct PCM path that runs in parallel with the
-   * existing `attachAudioSource` / AnalyserNode path and is the preferred
-   * route for feeding speech-to-text pipelines that already hold a decoded
-   * PCM slice.
+   * This method provides a direct PCM path and is the preferred route for
+   * feeding speech-to-text pipelines that already hold a decoded PCM slice.
    *
    * @param samples       Interleaved PCM samples (numeric array-like).
    * @param channelCount  Channels interleaved in `samples`.  Default: 2.
@@ -210,13 +197,6 @@ export class AudioVisualizer {
   dispose(): void {
     this.stopLoop();
 
-    if (this.analyserNode && this.audioPlayer) {
-      this.audioPlayer.disconnectTap(this.analyserNode);
-      this.analyserNode = null;
-      this.analyserBuffer = null;
-      this.audioPlayer = null;
-    }
-
     this.audioManager = null;
 
     if (this.canvas.parentNode) {
@@ -230,43 +210,23 @@ export class AudioVisualizer {
 
   private startLoop(): void {
     if (this.animFrameId !== null) return;
-    // Maximum number of interleaved stereo samples (L+R combined) to read per frame.
-    const MAX_INTERLEAVED_SAMPLES = 960;
+    // Number of interleaved stereo samples (L+R) to read per MVRP slice.
+    const SLICE_SAMPLES = 960;
     const tick = () => {
       this.animFrameId = requestAnimationFrame(tick);
 
-      if (this.analyserNode && this.analyserBuffer) {
-        // Poll fresh decoded PCM samples from the AnalyserNode each frame and
-        // feed them to updateFromPcm() to drive the waveform display.
-        this.analyserNode.getFloatTimeDomainData(this.analyserBuffer);
-        this.updateFromPcm(this.analyserBuffer, 2, false);
-      } else {
-        // Fallback: sample from the inbound decoded PCM capture buffer
-        const buf = this.audioManager?.getAudioBuffer();
-        if (buf?.asSample && (buf.nCount as number) > 0) {
-          const asSample = buf.asSample as number[];
-          const head: number = (buf.nHead as number) ?? 0;
-          const totalSamples = asSample.length;
-          // nCount is the total number of individual interleaved samples in the
-          // current slice (L+R combined).  Divide by 2 to get stereo frame count.
-          const count = Math.min(MAX_INTERLEAVED_SAMPLES, buf.nCount as number);
-          const frames = Math.floor(count / 2);
-          if (frames > 0) {
-            let sumSqL = 0;
-            let sumSqR = 0;
-            for (let i = 0; i < frames; i++) {
-              const l = asSample[(head + i * 2) % totalSamples] ?? 0;
-              const r = asSample[(head + i * 2 + 1) % totalSamples] ?? 0;
-              sumSqL += l * l;
-              sumSqR += r * r;
-            }
-            this.levelL = Math.min(Math.sqrt(sumSqL / frames), 1);
-            this.levelR = Math.min(Math.sqrt(sumSqR / frames), 1);
-          }
+      const buf = this.audioManager?.getAudioBuffer();
+      if (buf?.asSample && buf.nSlice !== this.lastSlice) {
+        this.lastSlice = buf.nSlice as number;
+        const asSample = buf.asSample as ArrayLike<number>;
+        const count = Math.min(SLICE_SAMPLES, asSample.length);
+        for (let i = 0; i < count; i++) {
+          this.pcmChunk[i] = (asSample[i] as number) ?? 0;
         }
-        this.pushSample(this.levelL, this.levelR);
-        this.drawFrame();
+        this.updateFromPcm(this.pcmChunk.subarray(0, count), 2, false);
       }
+
+      this.drawFrame();
     };
     this.animFrameId = requestAnimationFrame(tick);
   }
