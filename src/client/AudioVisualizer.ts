@@ -27,6 +27,15 @@ export interface VisualizerOptions {
  *   …avatar is active…
  *   vis.dispose();                                  // stops loop, removes canvas
  *
+<<<<<<< copilot/update-audio-visualizer-waveform
+ * Audio levels are sampled each animation frame by polling MVRP's decoded PCM
+ * buffer directly via `ProximityAudioManager.getAudioBuffer()`.  The `nSlice`
+ * counter is compared each frame; when it changes a fresh 960-sample chunk is
+ * extracted from `m_Buffer.asSample` and fed to `updateFromPcm()`, producing a
+ * continuously responsive waveform display.  When no audio source is attached,
+ * `update()` can be called directly with normalised L/R amplitude values for
+ * testing.
+=======
  * Audio levels are sampled each animation frame by reading directly from
  * MVRP's live `m_Buffer.asSample` decoded PCM data via
  * `ProximityAudioManager.getAudioBuffer()`.  The `nSlice` counter on the
@@ -36,6 +45,7 @@ export interface VisualizerOptions {
  * reflects the freshest decoded audio with no timing mismatch.  When no
  * audio source is attached, `update()` can be called directly with
  * normalised L/R amplitude values for testing.
+>>>>>>> main
  */
 export class AudioVisualizer {
   private readonly container: HTMLElement;
@@ -46,7 +56,11 @@ export class AudioVisualizer {
   // MVRP audio manager reference (set in attachAudioSource)
   private audioManager: ProximityAudioManager | null = null;
 
+<<<<<<< copilot/update-audio-visualizer-waveform
+  // Last observed nSlice counter; used to detect freshly decoded audio frames
+=======
   // Last observed nSlice value; -1 means no frame has been processed yet
+>>>>>>> main
   private lastSlice: number = -1;
 
   // Current L/R amplitude levels (0–1) read from MVRP or set via update()
@@ -64,6 +78,9 @@ export class AudioVisualizer {
   // Circular buffers for L/R channel amplitude samples (values in 0–1)
   private readonly sampleBufferL: Float32Array = new Float32Array(AudioVisualizer.BUFFER_SIZE);
   private readonly sampleBufferR: Float32Array = new Float32Array(AudioVisualizer.BUFFER_SIZE);
+
+  // Reusable buffer for a single MVRP slice (960 interleaved L+R samples)
+  private readonly pcmChunk: Float32Array = new Float32Array(960);
 
   // Write cursor; the oldest sample lives at this index
   private bufferIndex: number = 0;
@@ -98,12 +115,20 @@ export class AudioVisualizer {
   /**
    * Wire the visualizer into the live audio stream managed by `audioManager`.
    *
+<<<<<<< copilot/update-audio-visualizer-waveform
+   * Stores the manager reference so that the animation loop can poll
+   * `getAudioBuffer()` each frame.  Each time MVRP's `nSlice` counter advances
+   * (indicating a freshly decoded audio frame) a 960-sample chunk is read from
+   * `m_Buffer.asSample` and fed to `updateFromPcm()` so the waveform reflects
+   * the audio currently being played.
+=======
    * Each animation frame the loop reads `getAudioBuffer()` and checks the
    * `nSlice` counter.  When `nSlice` changes (MVRP has decoded a new audio
    * frame), up to 960 interleaved stereo samples are extracted from
    * `asSample` starting at position 0 and fed to `updateFromPcm()` so the
    * waveform reflects the audio currently being played.  `drawFrame()` is
    * called every tick regardless to keep the display smooth.
+>>>>>>> main
    *
    * Starts the requestAnimationFrame draw loop automatically.
    * Idempotent: subsequent calls have no effect while a source is already
@@ -211,6 +236,22 @@ export class AudioVisualizer {
 
   private startLoop(): void {
     if (this.animFrameId !== null) return;
+<<<<<<< copilot/update-audio-visualizer-waveform
+    // Number of interleaved stereo samples (L+R) to read per MVRP slice.
+    const SLICE_SAMPLES = 960;
+    const tick = () => {
+      this.animFrameId = requestAnimationFrame(tick);
+
+      const buf = this.audioManager?.getAudioBuffer();
+      if (buf?.asSample && buf.nSlice !== this.lastSlice) {
+        this.lastSlice = buf.nSlice as number;
+        const asSample = buf.asSample as ArrayLike<number>;
+        const count = Math.min(SLICE_SAMPLES, asSample.length);
+        for (let i = 0; i < count; i++) {
+          this.pcmChunk[i] = (asSample[i] as number) ?? 0;
+        }
+        this.updateFromPcm(this.pcmChunk.subarray(0, count), 2, false);
+=======
     // Maximum interleaved stereo samples (L+R) to read per decoded frame.
     const MAX_INTERLEAVED_SAMPLES = 960;
     const tick = () => {
@@ -231,6 +272,7 @@ export class AudioVisualizer {
           }
           this.updateFromPcm(chunk, 2, false);
         }
+>>>>>>> main
       }
 
       this.drawFrame();
