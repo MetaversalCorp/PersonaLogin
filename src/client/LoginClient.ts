@@ -35,6 +35,7 @@ export class LoginClient {
   private _pLnG: ILnGClient;
   private userSession: UserSession | null = null;
   private pendingUser: LnGUser | null = null;
+  private avatarUpdateActive = false;
 
   constructor(_container: HTMLElement) {
     this._pLnG = createLnGClient();
@@ -238,9 +239,36 @@ export class LoginClient {
       void this.handleLogout();
     });
 
-    // Teleport button
-    this.el("teleport-button")?.addEventListener("click", () => {
+    // Single teleport button
+    this.el("teleport-now-button")?.addEventListener("click", () => {
       this.handleTeleport();
+    });
+
+    // Avatar update toggle button
+    this.el("teleport-button")?.addEventListener("click", () => {
+      this.handleAvatarUpdateToggle();
+    });
+
+    // Lat/lon fine-tuning increment/decrement buttons
+    this.el("lat-decr")?.addEventListener("click", () => {
+      this.adjustLatLon("teleport-latitude", -0.0001);
+    });
+    this.el("lat-incr")?.addEventListener("click", () => {
+      this.adjustLatLon("teleport-latitude", 0.0001);
+    });
+    this.el("lon-decr")?.addEventListener("click", () => {
+      this.adjustLatLon("teleport-longitude", -0.0001);
+    });
+    this.el("lon-incr")?.addEventListener("click", () => {
+      this.adjustLatLon("teleport-longitude", 0.0001);
+    });
+
+    // Radius fine-tuning increment/decrement buttons (±1.0 m)
+    this.el("radius-decr")?.addEventListener("click", () => {
+      this.adjustLatLon("teleport-radius", -1.0);
+    });
+    this.el("radius-incr")?.addEventListener("click", () => {
+      this.adjustLatLon("teleport-radius", 1.0);
     });
 
     // Location presets
@@ -373,6 +401,13 @@ export class LoginClient {
   }
 
   private async handleLogout(): Promise<void> {
+    this.avatarUpdateActive = false;
+    const btn = this.el<HTMLButtonElement>("teleport-button");
+    if (btn) {
+      btn.innerHTML = '<i class="fa-solid fa-satellite-dish"></i> Start Avatar Updates';
+      btn.classList.remove("active");
+    }
+
     await this._pLnG.Logout();
     if (this.userSession) {
       await this.userSession.disconnect();
@@ -406,6 +441,59 @@ export class LoginClient {
   }
 
   // ─── Teleport ──────────────────────────────────────────────────────────────
+
+  private adjustLatLon(inputId: string, delta: number): void {
+    const input = this.el<HTMLInputElement>(inputId);
+    if (!input) return;
+    const current = parseFloat(input.value) || 0;
+    input.value = (current + delta).toFixed(4);
+  }
+
+  private handleAvatarUpdateToggle(): void {
+    this.avatarUpdateActive = !this.avatarUpdateActive;
+    const btn = this.el<HTMLButtonElement>("teleport-button");
+
+    if (this.avatarUpdateActive) {
+      if (btn) {
+        btn.innerHTML = '<i class="fa-solid fa-satellite-dish"></i> Avatar Updates Sending Active';
+        btn.classList.add("active");
+      }
+      console.log('[LoginClient] Registering avatar update callback (pTime-driven)');
+      this.userSession?.personaSession?.setAvatarUpdateCallback(() => {
+        try {
+          this.sendAvatarUpdate();
+        } catch (err) {
+          console.error('[LoginClient] sendAvatarUpdate error:', err);
+        }
+      });
+    } else {
+      if (btn) {
+        btn.innerHTML = '<i class="fa-solid fa-satellite-dish"></i> Start Avatar Updates';
+        btn.classList.remove("active");
+      }
+      console.log('[LoginClient] Clearing avatar update callback');
+      this.userSession?.personaSession?.setAvatarUpdateCallback(null);
+    }
+  }
+
+  private sendAvatarUpdate(): void {
+    const celestial =
+      (this.el<HTMLInputElement>("celestial-id")?.value ?? "").trim();
+    const lat = parseFloat(
+      this.el<HTMLInputElement>("teleport-latitude")?.value ?? "0"
+    );
+    const lon = parseFloat(
+      this.el<HTMLInputElement>("teleport-longitude")?.value ?? "0"
+    );
+    const radius = parseFloat(
+      this.el<HTMLInputElement>("teleport-radius")?.value ?? "0"
+    );
+
+    if (!celestial || isNaN(lat) || isNaN(lon) || isNaN(radius)) return;
+
+    const [dx, dy, dz] = latLonToCartesianYUp(lat, lon, radius);
+    this.userSession?.teleportTo(celestial, { x: dx, y: dy, z: dz });
+  }
 
   private setTeleportInputs(
     celestial: string,

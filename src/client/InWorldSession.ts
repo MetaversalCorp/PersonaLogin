@@ -16,6 +16,8 @@ export class InWorldSession extends Session {
   readonly personaSession: PersonaSession;
   private audioManager: ProximityAudioManager | null = null;
   private visualizer: AudioVisualizer | null = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private pTime: any = null;
 
   constructor(personaInfo: PersonaInfo, personaSession: PersonaSession) {
     super();
@@ -55,10 +57,27 @@ export class InWorldSession extends Session {
       console.warn('[InWorldSession] pLnGClient unavailable; proximity audio disabled');
     }
 
+    // Open the Time model and attach for periodic tick notifications.
+    // pTime sends onTick() callbacks on every internal tick, which we use to
+    // drive throttled avatar-position updates (replacing the non-ticking pRPersona).
+    const pClient = pLnG?.pClient ?? null;
+    this.pTime = pClient?.Time_Open?.() ?? null;
+    if (this.pTime) {
+      this.pTime.Attach(this);
+      console.log('[InWorldSession] pTime opened and attached for tick-driven avatar updates');
+    } else {
+      console.warn('[InWorldSession] pTime unavailable; avatar updates will not fire');
+    }
+
     this.setState(ConnectionState.InWorld);
   }
 
   async disconnect(): Promise<void> {
+    if (this.pTime) {
+      this.pTime.Detach(this);
+      this.pTime = null;
+    }
+
     if (this.visualizer) {
       this.visualizer.dispose();
       this.visualizer = null;
@@ -76,6 +95,23 @@ export class InWorldSession extends Session {
     this.setState(ConnectionState.Disconnected);
   }
 
+  /**
+   * Called by pTime on each internal tick when this session is attached via
+   * `pTime.Attach(this)`. Delegates to PersonaSession's onTick() handler
+   * so avatar-update callbacks fire within the MVRP event loop (not from
+   * setInterval or manual calls).
+   */
+  private lastServerTime = 0;
+
+  onTick(pNotice: any): void {
+    this.lastServerTime = pNotice.pData.tmServer;
+    try {
+      this.personaSession.onTick();
+    } catch (err) {
+      console.error('[InWorldSession] onTick delegation error:', err);
+    }
+  }
+
   public teleportTo(celestialId: string, position: { x: number; y: number; z: number }): void {
     if (!this.personaSession || !this.personaSession.pRPersona) {
       console.error('[InWorldSession] No PersonaSession or pRPersona for teleport');
@@ -88,7 +124,8 @@ export class InWorldSession extends Session {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const pRPersona = this.personaSession.pRPersona as any;
 
-      const tmStamp: number = typeof pRPersona.pTime === 'number' ? pRPersona.pTime : Date.now();
+      //const tmStamp: number = typeof pRPersona.pTime === 'number' ? pRPersona.pTime : Date.now();
+      const tmStamp: number = this.lastServerTime || Date.now();
       const updatePayload = {
         tmStamp,
         pState: {

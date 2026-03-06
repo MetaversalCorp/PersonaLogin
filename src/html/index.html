@@ -305,6 +305,24 @@
          gap: 12px;
       }
 
+      .teleport-form-row-4 {
+         display: grid;
+         grid-template-columns: 1fr 1.5fr 1.5fr 2fr;
+         gap: 8px;
+         margin-bottom: 12px;
+      }
+
+      .teleport-buttons-row {
+         display: flex;
+         gap: 8px;
+         margin-top: 10px;
+      }
+
+      .teleport-buttons-row .teleport-button {
+         flex: 1;
+         margin-top: 0;
+      }
+
       .teleport-button {
          background: rgba(255, 255, 255, 0.2);
          color: white;
@@ -381,7 +399,7 @@
 
       .teleport-panel-inner {
          display: grid;
-         grid-template-columns: 1fr 1fr;
+         grid-template-columns: 2fr 1fr;
          gap: 16px;
          align-items: flex-start;
       }
@@ -414,12 +432,13 @@
       }
 
       .visualizer-title {
-         font-size: 10px;
-         font-weight: 600;
-         opacity: 0.8;
+         font-size: 13px;
+         font-weight: 700;
+         opacity: 0.9;
          text-transform: uppercase;
          letter-spacing: 0.06em;
          text-align: center;
+         font-family: 'Roboto', sans-serif;
       }
 
       /* Stack vertically on narrow screens */
@@ -443,15 +462,17 @@
 
       .stt-panel {
          margin-top: 8px;
-         background: rgba(0, 0, 0, 0.55);
+         background: linear-gradient(135deg, rgba(0, 10, 30, 0.92) 0%, rgba(0, 45, 85, 0.88) 100%);
+         border: 1px solid rgba(0, 234, 255, 0.35);
          border-radius: 8px;
          padding: 16px;
-         color: #e0e0e0;
+         color: #e8f4ff;
          width: 100%;
+         font-family: 'Roboto', sans-serif;
       }
 
       .stt-panel h6 {
-         font-size: 11px;
+         font-size: 14px;
          font-weight: 700;
          text-transform: uppercase;
          letter-spacing: 0.08em;
@@ -467,41 +488,43 @@
       }
 
       .stt-controls button {
-         font-size: 11px;
-         padding: 4px 12px;
+         font-size: 13px;
+         padding: 5px 14px;
+         font-family: 'Roboto', sans-serif;
       }
 
       .stt-status {
-         font-size: 11px;
-         opacity: 0.7;
+         font-size: 14px;
+         font-family: 'Roboto', sans-serif;
+         opacity: 0.85;
          margin-bottom: 8px;
       }
 
       .stt-status span {
-         font-weight: 600;
+         font-weight: 700;
          color: #ff00cc;
       }
 
       .stt-buffer-info {
-         font-size: 10px;
-         font-family: 'Courier New', monospace;
-         opacity: 0.65;
+         font-size: 14px;
+         font-family: 'Roboto', sans-serif;
+         opacity: 0.85;
       }
 
       .stt-frame-info {
-         font-size: 10px;
-         font-family: 'Courier New', monospace;
-         opacity: 0.75;
-         margin-top: 4px;
+         font-size: 14px;
+         font-family: 'Roboto', sans-serif;
+         opacity: 0.9;
+         margin-top: 6px;
          display: flex;
          align-items: center;
-         gap: 4px;
+         gap: 6px;
       }
 
       .stt-live-dot {
          display: inline-block;
-         width: 7px;
-         height: 7px;
+         width: 9px;
+         height: 9px;
          border-radius: 50%;
          background: #ff4444;
          animation: stt-pulse 1s ease-in-out infinite;
@@ -511,6 +534,62 @@
       @keyframes stt-pulse {
          0%, 100% { opacity: 1; transform: scale(1); }
          50%       { opacity: 0.3; transform: scale(0.75); }
+      }
+
+      /* ── Lat/Lon fine-tuning controls ────────────────────────────────────── */
+
+      .lat-lon-controls {
+         display: flex;
+         align-items: center;
+         gap: 0;
+      }
+
+      .lat-lon-controls input {
+         flex: 1;
+         min-width: 0;
+         width: auto !important;
+      }
+
+      .lat-lon-btn {
+         background: rgba(255, 255, 255, 0.18);
+         color: white;
+         border: 2px solid rgba(255, 255, 255, 0.45);
+         border-radius: 4px;
+         padding: 6px 11px;
+         font-size: 16px;
+         font-weight: 700;
+         cursor: pointer;
+         transition: all 0.2s ease;
+         flex-shrink: 0;
+         line-height: 1;
+      }
+
+      .lat-lon-btn:hover {
+         background: rgba(255, 255, 255, 0.32);
+         border-color: rgba(255, 255, 255, 0.8);
+      }
+
+      .lat-lon-btn:active {
+         transform: scale(0.93);
+      }
+
+      /* ── Avatar update toggle button states ──────────────────────────────── */
+
+      .teleport-button.active {
+         background: rgba(255, 255, 255, 0.88);
+         color: #c0392b;
+         border-color: white;
+         animation: btn-pulse 1.5s ease-in-out infinite;
+      }
+
+      .teleport-button.active:hover {
+         background: white;
+         color: #e74c3c;
+      }
+
+      @keyframes btn-pulse {
+         0%, 100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.45); }
+         50%       { box-shadow: 0 0 0 9px rgba(255, 255, 255, 0); }
       }
    </style>
 </head>
@@ -572,7 +651,7 @@
                         <div class="card-footer d-flex gap-3 d-md-flex justify-content-end">
                            <button class="btn btn-outline-dark" id="guest-cancel-button" type="button"
                               tabindex="3">Back</button>
-                           <button class="btn btn-primary" id="guest-join-button" type="submit" tabindex="2">Join
+                           <button class="btn btn-secondary" id="guest-join-button" type="submit" tabindex="2">Join
                               World</button>
                         </div>
                      </form>
@@ -621,7 +700,7 @@
                            <div class="d-flex flex-wrap gap-3">
                               <button class="btn btn-outline-dark" id="forgot-button" type="button"
                                  tabindex="5">Forgot</button>
-                              <button class="btn btn-primary" id="login-button" type="submit" tabindex="4">Log
+                              <button class="btn btn-secondary" id="login-button" type="submit" tabindex="4">Log
                                  In</button>
                            </div>
                         </div>
@@ -682,7 +761,7 @@
                            </div>
                         </div>
                         <div class="card-footer d-flex gap-3 justify-content-end">
-                           <button class="btn btn-primary" id="tfa-confirm-button" type="submit"
+                           <button class="btn btn-secondary" id="tfa-confirm-button" type="submit"
                               tabindex="2">Confirm</button>
                         </div>
                      </form>
@@ -712,32 +791,47 @@
                <!-- Left column: teleport controls -->
                <div class="teleport-controls-col">
 
-            <div class="teleport-form-group">
-               <label>Celestial ID (pParent)</label>
-               <input type="text" id="celestial-id" placeholder="e.g., 104" value="104">
-            </div>
-
-            <div class="teleport-form-row">
+            <div class="teleport-form-row-4">
+               <div class="teleport-form-group">
+                  <label>Celestial ID (pParent)</label>
+                  <input type="text" id="celestial-id" placeholder="e.g., 104" value="104">
+               </div>
                <div class="teleport-form-group">
                   <label>Latitude</label>
-                  <input type="number" id="teleport-latitude" placeholder="1" step="0.0001" value="1" min="-90"
-                     max="90">
+                  <div class="lat-lon-controls">
+                     <button type="button" class="lat-lon-btn" id="lat-decr">−</button>
+                     <input type="number" id="teleport-latitude" placeholder="1" step="0.0001" value="1" min="-90"
+                        max="90">
+                     <button type="button" class="lat-lon-btn" id="lat-incr">+</button>
+                  </div>
                </div>
                <div class="teleport-form-group">
                   <label>Longitude</label>
-                  <input type="number" id="teleport-longitude" placeholder="1" step="0.0001" value="1" min="-180"
-                     max="180">
+                  <div class="lat-lon-controls">
+                     <button type="button" class="lat-lon-btn" id="lon-decr">−</button>
+                     <input type="number" id="teleport-longitude" placeholder="1" step="0.0001" value="1" min="-180"
+                        max="180">
+                     <button type="button" class="lat-lon-btn" id="lon-incr">+</button>
+                  </div>
+               </div>
+               <div class="teleport-form-group">
+                  <label>Radius (meters)</label>
+                  <div class="lat-lon-controls">
+                     <button type="button" class="lat-lon-btn" id="radius-decr">−</button>
+                     <input type="number" id="teleport-radius" placeholder="6371001.8" step="0.1" value="6371001.8">
+                     <button type="button" class="lat-lon-btn" id="radius-incr">+</button>
+                  </div>
                </div>
             </div>
 
-            <div class="teleport-form-group">
-               <label>Radius (meters)</label>
-               <input type="number" id="teleport-radius" placeholder="6371001.8" step="0.1" value="6371001.8">
+            <div class="teleport-buttons-row">
+               <button class="teleport-button" id="teleport-now-button">
+                  <i class="fa-solid fa-location-arrow"></i> Teleport
+               </button>
+               <button class="teleport-button" id="teleport-button">
+                  <i class="fa-solid fa-satellite-dish"></i> Start Avatar Updates
+               </button>
             </div>
-
-            <button class="teleport-button" id="teleport-button">
-               <i class="fa-solid fa-location-arrow"></i> Teleport
-            </button>
 
             <div style="margin-top: 12px;">
                <label style="display: block; font-size: 12px; margin-bottom: 8px; font-weight: 600;">Quick
@@ -773,9 +867,9 @@
                   <div class="stt-panel" id="stt-panel" style="display:none;">
                      <h6><i class="fa-solid fa-wave-square"></i> Inbound Audio Capture</h6>
                      <div class="stt-controls">
-                        <button class="btn btn-sm btn-outline-info"  id="stt-enable-btn">Enable Capture</button>
+                        <button class="btn btn-sm btn-outline-secondary"  id="stt-enable-btn">Enable Capture</button>
                         <button class="btn btn-sm btn-outline-secondary" id="stt-disable-btn" disabled>Disable Capture</button>
-                        <button class="btn btn-sm btn-outline-warning" id="stt-clear-btn">Clear Buffer</button>
+                        <button class="btn btn-sm btn-outline-secondary" id="stt-clear-btn">Clear Buffer</button>
                      </div>
                      <div class="stt-status">
                         Status: <span id="stt-status-text">Inactive</span>
@@ -955,6 +1049,7 @@
             });
             observer.observe(sessionSection, { attributes: true, attributeFilter: ['class'] });
          }
+
       });
    </script>
 
