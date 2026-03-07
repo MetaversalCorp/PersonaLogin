@@ -170,6 +170,11 @@ export class AudioVisualizer {
       this.audioCapture = null;
     }
 
+    if (this.proximityList) {
+      this.proximityList.dispose();
+      this.proximityList = null;
+    }
+
     if (this.animFrameId !== null) {
       cancelAnimationFrame(this.animFrameId);
       this.animFrameId = null;
@@ -402,14 +407,46 @@ export class AudioVisualizer {
   private updateProximityPanel(avatars: AvatarInfo[]): void {
     if (!this.proximityPanel) return;
 
+    // Clear existing content safely
+    this.proximityPanel.textContent = '';
+
+    const header = document.createElement('div');
+    header.className = 'proximity-header';
+
     if (avatars.length === 0) {
-      this.proximityPanel.innerHTML = '<em>No nearby avatars</em>';
+      header.textContent = 'Nearby Avatars';
+      this.proximityPanel.appendChild(header);
+
+      const empty = document.createElement('div');
+      empty.className = 'proximity-empty';
+      empty.textContent = 'None in range';
+      this.proximityPanel.appendChild(empty);
       return;
     }
 
-    const items = avatars
-      .map((a) => `<li>${a.name} (${a.distance.toFixed(1)}m)</li>`)
-      .join('');
-    this.proximityPanel.innerHTML = `<ul>${items}</ul>`;
+    header.textContent = `Nearby Avatars (${avatars.length})`;
+    this.proximityPanel.appendChild(header);
+
+    for (const a of avatars) {
+      const row = document.createElement('div');
+      row.className = 'proximity-row';
+
+      const idSpan = document.createElement('span');
+      idSpan.className = 'proximity-id';
+      idSpan.textContent = `[${a.personaID}]`;
+
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'proximity-name';
+      nameSpan.textContent = a.name;
+
+      const distSpan = document.createElement('span');
+      distSpan.className = 'proximity-distance';
+      distSpan.textContent = `${a.distance.toFixed(2)}m`;
+
+      row.appendChild(idSpan);
+      row.appendChild(nameSpan);
+      row.appendChild(distSpan);
+      this.proximityPanel.appendChild(row);
+    }
   }
 }
