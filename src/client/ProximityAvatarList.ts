@@ -17,6 +17,7 @@ export class ProximityAvatarList {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private proximity: any = null;
   private avatars: Map<number, AvatarInfo> = new Map();
+  private avatarNames: Map<number, string> = new Map();
   private localPosition: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 };
   private localPersonaID: number | null = null;
   private observers: Set<(avatars: AvatarInfo[]) => void> = new Set();
@@ -130,7 +131,7 @@ export class ProximityAvatarList {
   /**
    * Handle onAvatarUpdate event with batch avatar data.
    * The event contains:
-   * - aSBA_RProximity_Avatar_Open_Ex: Array of persona IDs
+   * - aSBA_RProximity_Avatar_Open_Ex: Array of objects with dwRPersonaIx and optional Name
    * - SBA_RProximity_Avatar_Update_Ex: Avatar state with position data
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -145,35 +146,26 @@ export class ProximityAvatarList {
       return;
     }
 
-    const dwRPersonaIx = avatarUpdateEx.twRPersonaIx;
+    const dwRPersonaIx = avatarUpdateEx.dwRPersonaIx;
 
     // Skip the local avatar
     if (dwRPersonaIx === this.localPersonaID) {
       return;
     }
 
-    console.log('[ProximityAvatarList] Processing avatar update for:', dwRPersonaIx);
-
-    // Extract position from pState.pPosition_Head.pRelative.vPosition
-    const pState = avatarUpdateEx.pState;
-    if (!pState || !pState.pPosition_Head) {
+    // Extract position from MVO_RAvatar_State.MVO_RPosition_Head.nX/Y/Z
+    const mvoState = avatarUpdateEx.MVO_RAvatar_State;
+    if (!mvoState || !mvoState.MVO_RPosition_Head) {
       console.warn('[ProximityAvatarList] No position data in avatar update');
       return;
     }
 
-    const positionHead = pState.pPosition_Head;
-    const vPosition = positionHead?.pRelative?.vPosition;
+    const positionHead = mvoState.MVO_RPosition_Head;
 
-    if (!vPosition) {
-      console.warn('[ProximityAvatarList] No vPosition in pPosition_Head');
-      return;
-    }
-
-    // vPosition has dX, dY, dZ (world coordinates)
     const position = {
-      x: vPosition.dX,
-      y: vPosition.dY,
-      z: vPosition.dZ,
+      x: positionHead.nX,
+      y: positionHead.nY,
+      z: positionHead.nZ,
     };
 
     const distance = this.calculateDistance(position);
@@ -181,25 +173,19 @@ export class ProximityAvatarList {
     // Determine if this is a new avatar (first appearance)
     const isNew = !this.avatars.has(dwRPersonaIx);
 
-    // Get name from avatarOpenExArray if available
-    let name = 'Unknown';
+    // Get name from avatarOpenExArray if available, and cache it
+    let name = this.avatarNames.get(dwRPersonaIx) || 'Unknown';
     if (avatarOpenExArray && Array.isArray(avatarOpenExArray)) {
-      // avatarOpenExArray contains persona IDs in the batch update
-      // If this is a new avatar, we might have name data
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const avatarOpenEx = avatarOpenExArray.find((a: any) => a.twRPersonaIx === dwRPersonaIx);
+      const avatarOpenEx = avatarOpenExArray.find((a: any) => a.dwRPersonaIx === dwRPersonaIx);
       if (avatarOpenEx && avatarOpenEx.Name) {
         const forename = avatarOpenEx.Name.wszForename || '';
         const surname = avatarOpenEx.Name.wszSurname || '';
-        name = (forename + ' ' + surname).trim() || 'Unknown';
-      }
-    }
-
-    // Preserve existing name if this is an update, not new
-    if (!isNew) {
-      const existing = this.avatars.get(dwRPersonaIx);
-      if (existing) {
-        name = existing.name;
+        const resolved = (forename + ' ' + surname).trim();
+        if (resolved) {
+          name = resolved;
+          this.avatarNames.set(dwRPersonaIx, name);
+        }
       }
     }
 
@@ -256,6 +242,7 @@ export class ProximityAvatarList {
   onLogout_Client(bVoluntary: boolean): void {
     console.log('[ProximityAvatarList] onLogout_Client:', bVoluntary);
     this.avatars.clear();
+    this.avatarNames.clear();
     this.localPersonaID = null;
     this.notifyObservers();
   }
@@ -317,6 +304,7 @@ export class ProximityAvatarList {
       }
     }
     this.avatars.clear();
+    this.avatarNames.clear();
     this.observers.clear();
     this.proximity = null;
     this.originalEmit = null;
