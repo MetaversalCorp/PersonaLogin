@@ -295,8 +295,8 @@ export class ProximityAudioManager {
 
       // Write decoded samples to frame capture if registered
       if (this.decodeFrameCapture) {
-        console.log(`[${codecLabel}] Decoded`, wSamples, 'samples');
-        console.log(`[${codecLabel}] channelData[0:10]:`, Array.from(channelData.slice(0, 10)));
+        // console.debug(`[${codecLabel}] Decoded`, wSamples, 'samples');
+        // console.debug(`[${codecLabel}] channelData[0:10]:`, Array.from(channelData.slice(0, 10)));
 
         this.writeDecodedSamplesToCapture(channelData);
       }
@@ -304,7 +304,7 @@ export class ProximityAudioManager {
       return result;
     };
 
-    mvAudio.Decode[0] = function(
+    mvAudio.Decode[0] = function (
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       this: any,
       channelData: Float32Array,
@@ -316,7 +316,7 @@ export class ProximityAudioManager {
       return decodeInterceptor(this, channelData, wSamples, byteStream, originalDecode0, 'Decode0');
     };
 
-    mvAudio.Decode[1] = function(
+    mvAudio.Decode[1] = function (
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       this: any,
       channelData: Float32Array,
@@ -339,11 +339,11 @@ export class ProximityAudioManager {
   private writeDecodedSamplesToCapture(channelData: Float32Array): void {
     if (!this.decodeFrameCapture) return;
 
-    console.log('[writeDecodedSamples] channelData[0:20]:', Array.from(channelData.slice(0, 20)));
+    ///console.debug('[writeDecodedSamples] channelData[0:20]:', Array.from(channelData.slice(0, 20)));
 
     // Write directly – no interleaving needed, data is already in correct format.
     this.decodeFrameCapture.buffer.write(channelData);
-    console.log('[writeDecodedSamples] Wrote', channelData.length, 'samples to capture');
+    ///console.debug('[writeDecodedSamples] Wrote', channelData.length, 'samples to capture');
   }
 
   /**
@@ -388,9 +388,9 @@ export class ProximityAudioManager {
     const mvrpAudio: any = this.proximity.GetAudio();
     if (!mvrpAudio) return null;
     return {
-      sampleRate:      mvrpAudio.m_nSampleRate    ?? 48000,
+      sampleRate: mvrpAudio.m_nSampleRate ?? 48000,
       samplesPerSlice: mvrpAudio.m_nSamples_Slice ?? 960,
-      bytesPerSample:  mvrpAudio.m_nBytes_Sample  ?? 2,
+      bytesPerSample: mvrpAudio.m_nBytes_Sample ?? 2,
     };
   }
 
