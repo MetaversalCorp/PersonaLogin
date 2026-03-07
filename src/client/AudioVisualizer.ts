@@ -141,9 +141,9 @@ export class AudioVisualizer {
 
     console.log('[AudioVisualizer] Capture attached to decode interceptor');
 
-    // Initialize proximity avatar list and register with RP1
+    // Initialize proximity avatar list and attach to Proximity
     this.proximityList = new ProximityAvatarList();
-    this.proximityList.init({ x: 0, y: 0, z: 0 }); // Will be updated by onUserReady
+    this.proximityList.init(proximity);
     this.proximityList.addObserver((avatars: AvatarInfo[]) => this.updateProximityPanel(avatars));
 
     this.proximityPanel = document.getElementById('proximity-panel');
