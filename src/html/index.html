@@ -465,6 +465,53 @@
 
       /* ── Speech-to-Text Demo ─────────────────────────────────────────────── */
 
+      .proximity-list {
+         background-color: #001a00;
+         border: 2px solid #00ff00;
+         border-radius: 4px;
+         padding: 12px;
+         font-family: 'Courier New', monospace;
+         font-size: 12px;
+         color: #00ff00;
+         width: 280px;
+         text-shadow: 0 0 4px rgba(0, 255, 0, 0.5);
+      }
+
+      .proximity-header {
+         font-weight: bold;
+         margin-bottom: 8px;
+         border-bottom: 1px solid #00ff00;
+         padding-bottom: 4px;
+      }
+
+      .proximity-row {
+         display: flex;
+         justify-content: space-between;
+         padding: 4px 0;
+         font-size: 11px;
+      }
+
+      .proximity-id {
+         color: #00aa00;
+         min-width: 40px;
+      }
+
+      .proximity-name {
+         flex: 1;
+         padding: 0 12px;
+         overflow: hidden;
+         text-overflow: ellipsis;
+         white-space: nowrap;
+      }
+
+      .proximity-distance {
+         color: #00ff00;
+         min-width: 60px;
+         text-align: right;
+      }
+
+      /* ── Speech-to-Text Demo (original section) ──────────────────────────── */
+
       .stt-panel {
          margin-top: 8px;
          background: linear-gradient(135deg, rgba(0, 10, 30, 0.92) 0%, rgba(0, 45, 85, 0.88) 100%);
@@ -888,6 +935,9 @@
                <div class="audio-visualizer-col">
                   <div class="visualizer-title">Inbound Audio</div>
                   <div class="audio-visualizer-container" id="audio-visualizer-container"></div>
+
+                  <!-- Nearby Avatars proximity list -->
+                  <div id="proximity-panel" class="proximity-list"></div>
 
                   <!-- Inbound Audio Capture controls -->
                   <!-- <div class="stt-panel" id="stt-panel" style="display:none;">
