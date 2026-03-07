@@ -104,6 +104,9 @@ export class AudioVisualizer {
 
     // Draw an idle state so the canvas is not blank before audio starts
     this.drawFrame();
+
+    // Locate the proximity panel if it exists in the DOM
+    this.proximityPanel = document.getElementById('proximity-panel');
   }
 
   // ─── Integration ────────────────────────────────────────────────────────────
@@ -278,6 +281,11 @@ export class AudioVisualizer {
       this.audioCapture.disable();
       this.audioCapture.dispose();
       this.audioCapture = null;
+    }
+
+    if (this.proximityList) {
+      this.proximityList.dispose();
+      this.proximityList = null;
     }
 
     this.audioManager = null;

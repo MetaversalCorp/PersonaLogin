@@ -96,14 +96,14 @@ export class ProximityAvatarList {
     // Wrap Emit to intercept events
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const self = this;
-    this.proximity.Emit = function(eventName: string, ...args: any[]): any {
+    this.proximity.Emit = function (eventName: string, ...args: any[]): any {
       // Call original first
       const result = self.originalEmit.apply(this, [eventName, ...args]);
 
       // Intercept onAvatarUpdate event
       if (eventName === 'onAvatarUpdate' && args.length > 0) {
         const eventData = args[0];
-        console.log('[ProximityAvatarList] Intercepted onAvatarUpdate');
+        ///console.log('[ProximityAvatarList] Intercepted onAvatarUpdate');
         self.handleAvatarUpdate(eventData);
       } else if (eventName === 'onModelClose' && args.length > 0) {
         const dwRPersonaIx = args[0];
@@ -153,7 +153,9 @@ export class ProximityAvatarList {
       return;
     }
 
-    // Extract position from pState.pPosition_Head.pRelative.vPosition.dX/dY/dZ
+    ///console.log('[ProximityAvatarList] Processing avatar update for:', dwRPersonaIx);
+
+    // Extract position from pState.pPosition_Head.pRelative.vPosition
     const pState = avatarUpdateEx.pState;
     if (!pState || !pState.pPosition_Head) {
       console.warn('[ProximityAvatarList] No position data in avatar update');
@@ -200,7 +202,7 @@ export class ProximityAvatarList {
       distance,
     });
 
-    console.log('[ProximityAvatarList] Avatar updated:', dwRPersonaIx, name, distance.toFixed(2) + 'm', isNew ? '(NEW)' : '(UPDATE)');
+    ///console.log('[ProximityAvatarList] Avatar updated:', dwRPersonaIx, name, distance.toFixed(2) + 'm', isNew ? '(NEW)' : '(UPDATE)');
     this.notifyObservers();
   }
 
