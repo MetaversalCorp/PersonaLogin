@@ -9,7 +9,8 @@ export interface AvatarInfo {
 }
 
 /**
- * Implements the RP1 listener interface to track nearby external avatars.
+ * Listens to Proximity events to track nearby external avatars.
+ * Attaches itself to the Proximity instance and receives onModelUpdate/onModelClose callbacks.
  * Maintains a sorted list of the 5 closest avatars and notifies observers of changes.
  */
 export class ProximityAvatarList {
@@ -17,41 +18,50 @@ export class ProximityAvatarList {
   private localPosition: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 };
   private localPersonaID: number | null = null;
   private observers: Set<(avatars: AvatarInfo[]) => void> = new Set();
-  private isRegistered: boolean = false;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private proximity: any = null;
+  private isAttached: boolean = false;
 
   /**
-   * Initialize the proximity tracker and register with RP1.
-   * @param initialLocalPos Optional initial position of the local avatar
+   * Initialize the proximity tracker and attach to the Proximity instance.
+   * @param proximity The MVRP Proximity instance from ProximityAudioManager.getProximity()
    */
-  init(initialLocalPos?: { x: number; y: number; z: number }): void {
-    if (initialLocalPos) {
-      this.localPosition = initialLocalPos;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  init(proximity: any): void {
+    if (!proximity) {
+      console.warn('[ProximityAvatarList] Proximity instance is null');
+      return;
     }
 
-    // Register this listener with RP1
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const rp1 = (globalThis as any).RP1 as { AddListener?: (l: unknown) => void } | undefined;
-    if (rp1 && rp1.AddListener) {
-      rp1.AddListener(this);
-      this.isRegistered = true;
-      console.log('[ProximityAvatarList] Registered with RP1');
-    } else {
-      console.warn('[ProximityAvatarList] RP1 not available');
+    this.proximity = proximity;
+
+    // Attach this listener to the Proximity instance so it calls our callbacks
+    try {
+      this.proximity.Attach(this);
+      this.isAttached = true;
+      console.log('[ProximityAvatarList] Attached to Proximity instance');
+    } catch (err) {
+      console.error('[ProximityAvatarList] Failed to attach to Proximity:', err);
     }
   }
 
   /**
-   * RP1 callback: Called when the local avatar is ready.
-   * Used to track the local persona ID and initial position.
+   * Proximity callback: Called when the local avatar is ready in the world.
+   * Receives the initial position and persona ID.
    */
   onUserReady(nAvatarIx: number, dwRPersonaIx: number, nX: number, nY: number, nZ: number): void {
     this.localPersonaID = dwRPersonaIx;
     this.localPosition = { x: nX, y: nY, z: nZ };
-    console.log('[ProximityAvatarList] Local avatar ready:', dwRPersonaIx, 'at', this.localPosition);
+    console.log('[ProximityAvatarList] Local avatar ready:', dwRPersonaIx, 'at', nX, nY, nZ);
   }
 
   /**
-   * RP1 callback: Called when a remote avatar's state is updated (position, animation, etc.).
+   * Proximity callback: Called when a remote avatar's state is updated.
+   * This includes position, animation, gesture, etc.
+   *
+   * @param SBA_RProximity_Avatar_Open_Ex Avatar metadata (name, ID) - only present on first appearance
+   * @param dwRPersonaIx The persona ID of the avatar
+   * @param MVO_RAvatar_State Current state including position, rotation, etc.
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onModelUpdate(SBA_RProximity_Avatar_Open_Ex: any, dwRPersonaIx: number, MVO_RAvatar_State: any): void {
@@ -60,21 +70,26 @@ export class ProximityAvatarList {
       return;
     }
 
-    // Only process if we have avatar data
-    if (!SBA_RProximity_Avatar_Open_Ex || !MVO_RAvatar_State) {
-      return;
+    // SBA_RProximity_Avatar_Open_Ex is only present on the first appearance of an avatar.
+    // For subsequent updates, preserve the stored name.
+    // If the avatar is not yet tracked and metadata is missing, skip — we cannot identify it.
+    let name: string;
+    if (SBA_RProximity_Avatar_Open_Ex) {
+      name = `${SBA_RProximity_Avatar_Open_Ex.Name.wszForename} ${SBA_RProximity_Avatar_Open_Ex.Name.wszSurname}`;
+    } else {
+      const existing = this.avatars.get(dwRPersonaIx);
+      if (!existing) return;
+      name = existing.name;
     }
 
-    const name = `${SBA_RProximity_Avatar_Open_Ex.Name.wszForename} ${SBA_RProximity_Avatar_Open_Ex.Name.wszSurname}`;
-    const position = MVO_RAvatar_State.MVO_RPosition_Head;
-
+    const position = MVO_RAvatar_State?.MVO_RPosition_Head;
     if (position) {
       this.updateAvatar(dwRPersonaIx, name, position);
     }
   }
 
   /**
-   * RP1 callback: Called when a remote avatar is removed from the world.
+   * Proximity callback: Called when a remote avatar leaves the proximity.
    */
   onModelClose(dwRPersonaIx: number): void {
     // Skip the local avatar
@@ -86,20 +101,19 @@ export class ProximityAvatarList {
   }
 
   /**
-   * RP1 callback: Called on a tick (time update).
-   * Can be used to periodically recalculate distances.
+   * Proximity callback: Called when an avatar hides (goes out of range but not fully removed).
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  onTime_Tick(_pParam: any): void {
-    // Distances are recalculated on every model update, but we could periodically
-    // trigger observer notifications here if needed
+  onModelHide(dwRPersonaIx: number): void {
+    // For proximity list, treat hide the same as close
+    this.removeAvatar(dwRPersonaIx);
   }
 
   /**
-   * RP1 callback: Stub for model hide events.
+   * Proximity callback: Called on time tick updates.
    */
-  onModelHide(_dwRPersonaIx: number): void {
-    // Not used for proximity tracking
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onTime_Tick(_pParam: any): void {
+    // Distances are recalculated on every model update; no action needed here
   }
 
   /**
@@ -190,20 +204,21 @@ export class ProximityAvatarList {
   }
 
   /**
-   * Clean up and unregister from RP1.
+   * Clean up and detach from Proximity.
    */
   dispose(): void {
-    if (this.isRegistered) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const rp1 = (globalThis as any).RP1 as { RemoveListener?: (l: unknown) => void } | undefined;
-      if (rp1 && rp1.RemoveListener) {
-        rp1.RemoveListener(this);
-        this.isRegistered = false;
-        console.log('[ProximityAvatarList] Unregistered from RP1');
+    if (this.isAttached && this.proximity) {
+      try {
+        this.proximity.Detach(this);
+        this.isAttached = false;
+        console.log('[ProximityAvatarList] Detached from Proximity');
+      } catch (err) {
+        console.error('[ProximityAvatarList] Error detaching from Proximity:', err);
       }
     }
 
     this.avatars.clear();
     this.observers.clear();
+    this.proximity = null;
   }
 }
