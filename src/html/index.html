@@ -463,6 +463,87 @@
          }
       }
 
+      /* ── Proximity Avatar Table ───────────────────────────────────────────── */
+
+      .proximity-container {
+         margin-top: 10px;
+         padding: 10px;
+         background: rgba(0, 0, 0, 0.35);
+         border-radius: 4px;
+         border: 1px solid rgba(255, 255, 255, 0.15);
+         width: 280px;
+      }
+
+      .proximity-header {
+         font-weight: bold;
+         font-size: 12px;
+         margin-bottom: 8px;
+         color: rgba(255, 255, 255, 0.9);
+         text-transform: uppercase;
+         letter-spacing: 0.06em;
+      }
+
+      .proximity-table {
+         width: 100%;
+         border-collapse: collapse;
+         font-size: 11px;
+      }
+
+      .proximity-table th {
+         background: rgba(255, 255, 255, 0.15);
+         padding: 4px 6px;
+         text-align: left;
+         border: 1px solid rgba(255, 255, 255, 0.2);
+         font-weight: 600;
+         color: rgba(255, 255, 255, 0.85);
+      }
+
+      .proximity-table td {
+         padding: 3px 6px;
+         border: 1px solid rgba(255, 255, 255, 0.1);
+         color: rgba(255, 255, 255, 0.8);
+      }
+
+      .proximity-table tr:nth-child(even) td {
+         background: rgba(255, 255, 255, 0.05);
+      }
+
+      .proximity-table tr:hover td {
+         background: rgba(0, 234, 255, 0.1);
+      }
+
+      .proximity-id {
+         font-weight: bold;
+         width: 60px;
+         font-family: 'Courier New', monospace;
+      }
+
+      .proximity-name {
+         max-width: 120px;
+         overflow: hidden;
+         text-overflow: ellipsis;
+         white-space: nowrap;
+      }
+
+      .proximity-distance {
+         width: 60px;
+         text-align: right;
+         font-family: 'Courier New', monospace;
+      }
+
+      .proximity-empty {
+         color: rgba(255, 255, 255, 0.5);
+         font-size: 11px;
+         padding: 6px 0;
+      }
+
+      /* Stack proximity table below visualizer on narrow screens */
+      @media (max-width: 480px) {
+         .proximity-container {
+            width: 100%;
+         }
+      }
+
       /* ── Speech-to-Text Demo ─────────────────────────────────────────────── */
 
       .proximity-list {
@@ -935,6 +1016,7 @@
                <div class="audio-visualizer-col">
                   <div class="visualizer-title">Inbound Audio</div>
                   <div class="audio-visualizer-container" id="audio-visualizer-container"></div>
+                  <div class="proximity-container" id="proximity-panel"></div>
 
                   <!-- Nearby Avatars proximity list -->
                   <div id="proximity-panel" class="proximity-list"></div>

@@ -144,12 +144,13 @@ export class AudioVisualizer {
 
     console.log('[AudioVisualizer] Capture attached to decode interceptor');
 
-    // Initialize proximity avatar list
+    // Initialize proximity avatar list and attach to Proximity
     this.proximityList = new ProximityAvatarList();
-    this.proximityList.init(audioManager, { x: 0, y: 0, z: 0 });
+    this.proximityList.init(proximity);  // Attach directly to Proximity instance
     this.proximityList.addObserver((avatars: AvatarInfo[]) => this.updateProximityPanel(avatars));
 
-    console.log('[AudioVisualizer] Proximity panel initialized');
+    this.proximityPanel = document.getElementById('proximity-panel');
+    console.log('[AudioVisualizer] Proximity avatar list initialized');
 
     this.startLoop();
     console.log('[AudioVisualizer] Attached to audio source; visualizer active');
@@ -183,6 +184,19 @@ export class AudioVisualizer {
     }
 
     this.audioManager = null;
+  }
+
+  /**
+   * Update the local avatar's persona ID and position in the proximity list.
+   * Called from InWorldSession.teleportTo() to keep distance calculations accurate.
+   *
+   * @param personaID The local persona's numeric ID
+   * @param position The Cartesian position {x, y, z} in global coordinates
+   */
+  updateProximityListPosition(personaID: number, position: { x: number; y: number; z: number }): void {
+    if (this.proximityList) {
+      this.proximityList.updateLocalPosition(personaID, position);
+    }
   }
 
   /**
@@ -275,6 +289,12 @@ export class AudioVisualizer {
     }
 
     this.audioManager = null;
+
+    if (this.proximityList) {
+      this.proximityList.dispose();
+      this.proximityList = null;
+    }
+    this.proximityPanel = null;
 
     if (this.canvas.parentNode) {
       this.canvas.parentNode.removeChild(this.canvas);
@@ -393,51 +413,71 @@ export class AudioVisualizer {
     c.stroke();
   }
 
-  // ─── Proximity panel ────────────────────────────────────────────────────────
-
   /**
-   * Update the proximity panel with the closest avatars.
+   * Update the proximity panel with a table of the 10 closest avatars.
    * DOM nodes are constructed via the DOM API to prevent XSS from avatar names.
    */
   private updateProximityPanel(avatars: AvatarInfo[]): void {
     if (!this.proximityPanel) return;
 
+    // Clear existing content safely
     this.proximityPanel.textContent = '';
 
     const header = document.createElement('div');
     header.className = 'proximity-header';
-    header.textContent = 'Nearby Avatars';
+
+    if (avatars.length === 0) {
+      header.textContent = 'Nearby Avatars';
+      this.proximityPanel.appendChild(header);
+
+      const empty = document.createElement('div');
+      empty.className = 'proximity-empty';
+      empty.textContent = 'None in range';
+      this.proximityPanel.appendChild(empty);
+      return;
+    }
+
+    header.textContent = `Nearby Avatars (${avatars.length})`;
     this.proximityPanel.appendChild(header);
 
-    for (const avatar of avatars) {
-      const row = document.createElement('div');
-      row.className = 'proximity-row';
+    // Build table of 10 closest avatars
+    const table = document.createElement('table');
+    table.className = 'proximity-table';
 
-      const idSpan = document.createElement('span');
-      idSpan.className = 'proximity-id';
-      idSpan.textContent = `[${avatar.personaID}]`;
-
-      const nameSpan = document.createElement('span');
-      nameSpan.className = 'proximity-name';
-      nameSpan.textContent = avatar.name;
-
-      const distSpan = document.createElement('span');
-      distSpan.className = 'proximity-distance';
-      distSpan.textContent = `${avatar.distance.toFixed(2)}m`;
-
-      row.appendChild(idSpan);
-      row.appendChild(nameSpan);
-      row.appendChild(distSpan);
-      this.proximityPanel.appendChild(row);
+    // Table header
+    const thead = document.createElement('thead');
+    const headerRow = document.createElement('tr');
+    for (const label of ['Avatar ID', 'Name', 'Distance']) {
+      const th = document.createElement('th');
+      th.textContent = label;
+      headerRow.appendChild(th);
     }
-  }
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
 
-  /**
-   * Update local avatar position for accurate distance calculations.
-   */
-  updateLocalPosition(x: number, y: number, z: number): void {
-    if (this.proximityList) {
-      this.proximityList.setLocalPosition(x, y, z);
+    // Table body
+    const tbody = document.createElement('tbody');
+    for (const a of avatars) {
+      const tr = document.createElement('tr');
+
+      const idTd = document.createElement('td');
+      idTd.className = 'proximity-id';
+      idTd.textContent = String(a.personaID);
+
+      const nameTd = document.createElement('td');
+      nameTd.className = 'proximity-name';
+      nameTd.textContent = a.name;
+
+      const distTd = document.createElement('td');
+      distTd.className = 'proximity-distance';
+      distTd.textContent = `${a.distance.toFixed(2)}m`;
+
+      tr.appendChild(idTd);
+      tr.appendChild(nameTd);
+      tr.appendChild(distTd);
+      tbody.appendChild(tr);
     }
+    table.appendChild(tbody);
+    this.proximityPanel.appendChild(table);
   }
 }
