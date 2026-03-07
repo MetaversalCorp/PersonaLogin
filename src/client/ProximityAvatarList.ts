@@ -9,9 +9,12 @@ export interface AvatarInfo {
 }
 
 /**
- * Tracks nearby external avatars by listening to Proximity events.
- * Attaches directly to the Proximity instance using Proximity.Attach(this).
- * Implements the callback interface that Proximity will invoke.
+ * Tracks nearby external avatars by intercepting Proximity's internal
+ * avatar event notifications. This follows the pattern from PersonaLogin's
+ * audio decode interception system.
+ *
+ * When initialized with a Proximity instance, wraps its internal notification
+ * methods to intercept onModelUpdate, onModelClose, etc. events.
  */
 export class ProximityAvatarList {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -20,10 +23,15 @@ export class ProximityAvatarList {
   private localPosition: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 };
   private localPersonaID: number | null = null;
   private observers: Set<(avatars: AvatarInfo[]) => void> = new Set();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private originalNotify: any = null;
+  private notifyMethodName: string = '';
 
   /**
-   * Initialize and attach to the Proximity instance.
-   * @param proximity The Proximity instance from ProximityAudioManager
+   * Initialize and hook into the Proximity instance.
+   * Wraps Proximity's notification mechanism to intercept avatar events.
+   *
+   * @param proximity The MV.MVRP.Proximity instance from ProximityAudioManager
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   init(proximity: any): void {
@@ -34,19 +42,87 @@ export class ProximityAvatarList {
 
     this.proximity = proximity;
 
-    // Attach this listener to Proximity
-    // Proximity will call our callback methods when avatar events occur
-    try {
-      this.proximity.Attach(this);
-      console.log('[ProximityAvatarList] Attached to Proximity');
-    } catch (err) {
-      console.error('[ProximityAvatarList] Failed to attach to Proximity:', err);
-    }
+    // Hook into Proximity's notification system by wrapping its internal
+    // dispatch method – the same technique used by the audio decode interceptor.
+    this.setupProximityInterception();
+
+    console.log('[ProximityAvatarList] Initialized and hooked into Proximity');
   }
 
   /**
-   * Proximity callback: Local avatar has entered the world.
-   * Called once when user is ready to play.
+   * Intercept Proximity's notification/dispatch mechanism.
+   * Similar to setupDecodeInterception in ProximityAudioManager.
+   */
+  private setupProximityInterception(): void {
+    if (!this.proximity) return;
+
+    // Proximity may dispatch events through one of these methods
+    const notifyMethods = ['Emit', 'Notify', 'NotifyListeners', 'notify'];
+    let foundMethod = null;
+    let methodName = '';
+
+    for (const method of notifyMethods) {
+      if (typeof this.proximity[method] === 'function') {
+        foundMethod = this.proximity[method];
+        methodName = method;
+        break;
+      }
+    }
+
+    if (!foundMethod) {
+      console.warn('[ProximityAvatarList] Could not find Proximity notification method; falling back to Attach');
+      // Fall back to direct attachment
+      if (typeof this.proximity.Attach === 'function') {
+        try {
+          this.proximity.Attach(this);
+          console.log('[ProximityAvatarList] Attached as listener (fallback)');
+        } catch (err) {
+          console.error('[ProximityAvatarList] Failed to attach:', err);
+        }
+      }
+      return;
+    }
+
+    // Capture method name and original for later restoration in dispose()
+    this.originalNotify = foundMethod;
+    this.notifyMethodName = methodName;
+
+    // Wrap the notification method to intercept events and forward to our handlers.
+    // Arrow function preserves `this` as the ProximityAvatarList instance;
+    // the original method is called with the proximity object as context.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    this.proximity[methodName] = (eventName: string, ...args: any[]): any => {
+      // Call the original dispatch first so existing listeners are unaffected
+      const result = this.originalNotify.call(this.proximity, eventName, ...args);
+
+      // Intercept avatar events and forward to our handlers
+      if (eventName === 'onModelUpdate' && args.length >= 2) {
+        const [SBA_RProximity_Avatar_Open_Ex, dwRPersonaIx, MVO_RAvatar_State] = args;
+        this.onModelUpdate(SBA_RProximity_Avatar_Open_Ex, dwRPersonaIx, MVO_RAvatar_State);
+      } else if (eventName === 'onModelClose' && args.length >= 1) {
+        const [dwRPersonaIx] = args;
+        this.onModelClose(dwRPersonaIx);
+      } else if (eventName === 'onModelHide' && args.length >= 1) {
+        const [dwRPersonaIx] = args;
+        this.onModelHide(dwRPersonaIx);
+      } else if (eventName === 'onUserReady' && args.length >= 5) {
+        const [nAvatarIx, dwRPersonaIx, nX, nY, nZ] = args;
+        this.onUserReady(nAvatarIx, dwRPersonaIx, nX, nY, nZ);
+      } else if (eventName === 'onLogout_Client' && args.length >= 1) {
+        const [bVoluntary] = args;
+        this.onLogout_Client(bVoluntary);
+      } else if (eventName === 'onTime_Tick') {
+        this.onTime_Tick(args[0]);
+      }
+
+      return result;
+    };
+
+    console.log('[ProximityAvatarList] Wrapped Proximity.' + methodName + ' for event interception');
+  }
+
+  /**
+   * Avatar event callback: Local avatar has entered the world.
    */
   onUserReady(nAvatarIx: number, dwRPersonaIx: number, nX: number, nY: number, nZ: number): void {
     this.localPersonaID = dwRPersonaIx;
@@ -55,8 +131,8 @@ export class ProximityAvatarList {
   }
 
   /**
-   * Proximity callback: External avatar has appeared or updated.
-   * Called by Proximity when avatar data changes.
+   * Avatar event callback: External avatar has appeared or updated.
+   * Called when Proximity has avatar update data.
    *
    * @param SBA_RProximity_Avatar_Open_Ex Avatar metadata (null on updates, present on first appearance)
    * @param dwRPersonaIx The unique ID of the external avatar
@@ -119,8 +195,7 @@ export class ProximityAvatarList {
   }
 
   /**
-   * Proximity callback: External avatar has gone out of range (hidden).
-   * Called by Proximity when avatar goes out of proximity range.
+   * Avatar event callback: External avatar has gone out of range (hidden).
    */
   onModelHide(dwRPersonaIx: number): void {
     // Skip the local avatar
@@ -137,7 +212,7 @@ export class ProximityAvatarList {
   }
 
   /**
-   * Proximity callback: User has logged out.
+   * Avatar event callback: User has logged out.
    * Clear all tracked avatars.
    */
   onLogout_Client(bVoluntary: boolean): void {
@@ -148,8 +223,7 @@ export class ProximityAvatarList {
   }
 
   /**
-   * Proximity callback: Time tick update.
-   * Can be used for periodic operations if needed.
+   * Tick callback: Time tick update.
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onTime_Tick(_pParam: any): void {
@@ -201,19 +275,33 @@ export class ProximityAvatarList {
   }
 
   /**
-   * Clean up: Detach from Proximity.
+   * Clean up: Restore the original Proximity notification method and release resources.
    */
   dispose(): void {
-    if (this.proximity) {
+    this.avatars.clear();
+    this.observers.clear();
+
+    if (this.proximity && this.originalNotify && this.notifyMethodName) {
       try {
-        this.proximity.Detach(this);
-        console.log('[ProximityAvatarList] Detached from Proximity');
+        // Restore the original notification method
+        this.proximity[this.notifyMethodName] = this.originalNotify;
+        console.log('[ProximityAvatarList] Restored original Proximity.' + this.notifyMethodName);
+      } catch (err) {
+        console.error('[ProximityAvatarList] Error during cleanup:', err);
+      }
+    } else if (this.proximity && !this.originalNotify) {
+      // Attached via Attach fallback – detach
+      try {
+        if (typeof this.proximity.Detach === 'function') {
+          this.proximity.Detach(this);
+          console.log('[ProximityAvatarList] Detached from Proximity (fallback)');
+        }
       } catch (err) {
         console.error('[ProximityAvatarList] Error detaching:', err);
       }
     }
-    this.avatars.clear();
-    this.observers.clear();
     this.proximity = null;
+    this.originalNotify = null;
+    this.notifyMethodName = '';
   }
 }
