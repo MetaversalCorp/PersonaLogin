@@ -102,7 +102,7 @@ export class ProximityAvatarList {
       // Intercept onAvatarUpdate event
       if (eventName === 'onAvatarUpdate' && args.length > 0) {
         const eventData = args[0];
-        console.log('[ProximityAvatarList] Intercepted onAvatarUpdate');
+        ///console.log('[ProximityAvatarList] Intercepted onAvatarUpdate');
         self.handleAvatarUpdate(eventData);
       } else if (eventName === 'onModelClose' && args.length > 0) {
         const dwRPersonaIx = args[0];
@@ -152,7 +152,7 @@ export class ProximityAvatarList {
       return;
     }
 
-    console.log('[ProximityAvatarList] Processing avatar update for:', dwRPersonaIx);
+    ///console.log('[ProximityAvatarList] Processing avatar update for:', dwRPersonaIx);
 
     // Extract position from pState.pPosition_Head.pRelative.vPosition
     const pState = avatarUpdateEx.pState;
@@ -210,7 +210,7 @@ export class ProximityAvatarList {
       distance,
     });
 
-    console.log('[ProximityAvatarList] Avatar updated:', dwRPersonaIx, name, distance.toFixed(2) + 'm', isNew ? '(NEW)' : '(UPDATE)');
+    ///console.log('[ProximityAvatarList] Avatar updated:', dwRPersonaIx, name, distance.toFixed(2) + 'm', isNew ? '(NEW)' : '(UPDATE)');
     this.notifyObservers();
   }
 
