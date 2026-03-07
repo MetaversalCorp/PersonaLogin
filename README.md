@@ -27,6 +27,9 @@ Open (`http://localhost:8090`) in web browser.
 
 Log in with registered account
 
+### 4. Live demo
+[Live demo](https://cdn.rp1.com/res/apps/personalogin/)
+
 ---
 
 ## 1. Installation Instructions
