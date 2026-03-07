@@ -20,6 +20,7 @@ export class ProximityAvatarList {
   private localPosition: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 };
   private localPersonaID: number | null = null;
   private observers: Set<(avatars: AvatarInfo[]) => void> = new Set();
+  private isAttached: boolean = false;
 
   /**
    * Initialize and attach to the Proximity instance.
@@ -38,6 +39,7 @@ export class ProximityAvatarList {
     // This causes Proximity to call our onModelUpdate, onModelClose, onUserReady methods.
     try {
       this.proximity.Attach(this);
+      this.isAttached = true;
       console.log('[ProximityAvatarList] Attached to Proximity');
     } catch (err) {
       console.error('[ProximityAvatarList] Failed to attach to Proximity:', err);
@@ -110,6 +112,14 @@ export class ProximityAvatarList {
   onModelHide(dwRPersonaIx: number): void {
     console.log('[ProximityAvatarList] onModelHide:', dwRPersonaIx);
     this.removeAvatar(dwRPersonaIx);
+  }
+
+  /**
+   * Proximity callback: Called on time tick updates.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onTime_Tick(_pParam: any): void {
+    // Can be used for periodic updates if needed
   }
 
   /**
@@ -203,9 +213,10 @@ export class ProximityAvatarList {
    * Clean up and detach from Proximity.
    */
   dispose(): void {
-    if (this.proximity) {
+    if (this.isAttached && this.proximity) {
       try {
         this.proximity.Detach(this);
+        this.isAttached = false;
         console.log('[ProximityAvatarList] Detached from Proximity');
       } catch (err) {
         console.error('[ProximityAvatarList] Error detaching from Proximity:', err);
