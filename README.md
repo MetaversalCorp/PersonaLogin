@@ -10,6 +10,7 @@ Minimal but fully functional Persona authentication and session management clien
 - Development server with hot reload
 
 ## Quickstart
+### 1. Starting up
 ```
 git clone https://github.com/MetaversalCorp/PersonaLogin.git
 cd PersonaLogin
@@ -17,8 +18,14 @@ npm install
 npm run build
 npm run dev
 ```
-Register for free account at [rp1.com](https://my.rp1.com/signup)
-then open (http://localhost:8090) in web browser
+### 2. Register
+Register for free account at [`rp1.com`](https://my.rp1.com/signup)
+
+*NOTE*: Confirmation code email might go to Spam folder
+### 3. Run the app
+Open (`http://localhost:8090`) in web browser.
+
+Log in with registered account
 
 ---
 
