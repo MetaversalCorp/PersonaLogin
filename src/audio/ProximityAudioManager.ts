@@ -3,6 +3,7 @@
 declare const MV: any;
 
 import { AVStreamAudioPlayer } from './AVStreamAudioPlayer.js';
+import type { AudioFrameCapture } from './AudioFrameCapture.js';
 
 /**
  * ProximityAudioManager – owns the MV.MVRP.Proximity instance and wires it to
@@ -191,6 +192,31 @@ export class ProximityAudioManager {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getProximity(): any {
     return this.proximity;
+  }
+
+  /**
+   * Connect an AudioFrameCapture instance to the audio stream.
+   * Designed to be called after the player is available (i.e. after start()).
+   * @param capture The AudioFrameCapture instance to wire in.
+   */
+  connectAudioCapture(capture: AudioFrameCapture): void {
+    if (!this.audioPlayer) return;
+    const node = capture.processorNode;
+    if (node) {
+      this.audioPlayer.connectTap(node);
+    }
+  }
+
+  /**
+   * Disconnect a previously wired AudioFrameCapture.
+   * @param capture The AudioFrameCapture instance to disconnect.
+   */
+  disconnectAudioCapture(capture: AudioFrameCapture): void {
+    if (!this.audioPlayer) return;
+    const node = capture.processorNode;
+    if (node) {
+      this.audioPlayer.disconnectTap(node);
+    }
   }
 
   /**
