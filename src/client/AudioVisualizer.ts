@@ -1,5 +1,7 @@
 import type { ProximityAudioManager } from '../audio/ProximityAudioManager.js';
 import { AudioFrameCapture } from '../audio/AudioFrameCapture.js';
+import { ProximityAvatarList } from './ProximityAvatarList.js';
+import type { AvatarInfo } from './ProximityAvatarList.js';
 
 /** Options for configuring the AudioVisualizer. */
 export interface VisualizerOptions {
@@ -46,6 +48,10 @@ export class AudioVisualizer {
 
   // AudioFrameCapture tap used to read decoded PCM from the MVRP stream
   private audioCapture: AudioFrameCapture | null = null;
+
+  // ProximityAvatarList tracks nearby avatars and updates the proximity panel
+  private proximityList: ProximityAvatarList | null = null;
+  private proximityPanel: HTMLElement | null = null;
   // Scratch buffer for reading PCM samples from the audioCapture ring buffer
   private readonly readBuffer: Float32Array = new Float32Array(960);
 
@@ -98,6 +104,9 @@ export class AudioVisualizer {
 
     // Draw an idle state so the canvas is not blank before audio starts
     this.drawFrame();
+
+    // Locate the proximity panel if it exists in the DOM
+    this.proximityPanel = document.getElementById('proximity-panel');
   }
 
   // ─── Integration ────────────────────────────────────────────────────────────
@@ -135,6 +144,13 @@ export class AudioVisualizer {
 
     console.log('[AudioVisualizer] Capture attached to decode interceptor');
 
+    // Initialize proximity avatar list
+    this.proximityList = new ProximityAvatarList();
+    this.proximityList.init(audioManager, { x: 0, y: 0, z: 0 });
+    this.proximityList.addObserver((avatars: AvatarInfo[]) => this.updateProximityPanel(avatars));
+
+    console.log('[AudioVisualizer] Proximity panel initialized');
+
     this.startLoop();
     console.log('[AudioVisualizer] Attached to audio source; visualizer active');
   }
@@ -154,6 +170,11 @@ export class AudioVisualizer {
       this.audioCapture.disable();
       this.audioCapture.dispose();
       this.audioCapture = null;
+    }
+
+    if (this.proximityList) {
+      this.proximityList.dispose();
+      this.proximityList = null;
     }
 
     if (this.animFrameId !== null) {
@@ -246,6 +267,11 @@ export class AudioVisualizer {
       this.audioCapture.disable();
       this.audioCapture.dispose();
       this.audioCapture = null;
+    }
+
+    if (this.proximityList) {
+      this.proximityList.dispose();
+      this.proximityList = null;
     }
 
     this.audioManager = null;
@@ -365,5 +391,53 @@ export class AudioVisualizer {
       c.lineTo(x, centerY + lineH);
     }
     c.stroke();
+  }
+
+  // ─── Proximity panel ────────────────────────────────────────────────────────
+
+  /**
+   * Update the proximity panel with the closest avatars.
+   * DOM nodes are constructed via the DOM API to prevent XSS from avatar names.
+   */
+  private updateProximityPanel(avatars: AvatarInfo[]): void {
+    if (!this.proximityPanel) return;
+
+    this.proximityPanel.textContent = '';
+
+    const header = document.createElement('div');
+    header.className = 'proximity-header';
+    header.textContent = 'Nearby Avatars';
+    this.proximityPanel.appendChild(header);
+
+    for (const avatar of avatars) {
+      const row = document.createElement('div');
+      row.className = 'proximity-row';
+
+      const idSpan = document.createElement('span');
+      idSpan.className = 'proximity-id';
+      idSpan.textContent = `[${avatar.personaID}]`;
+
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'proximity-name';
+      nameSpan.textContent = avatar.name;
+
+      const distSpan = document.createElement('span');
+      distSpan.className = 'proximity-distance';
+      distSpan.textContent = `${avatar.distance.toFixed(2)}m`;
+
+      row.appendChild(idSpan);
+      row.appendChild(nameSpan);
+      row.appendChild(distSpan);
+      this.proximityPanel.appendChild(row);
+    }
+  }
+
+  /**
+   * Update local avatar position for accurate distance calculations.
+   */
+  updateLocalPosition(x: number, y: number, z: number): void {
+    if (this.proximityList) {
+      this.proximityList.setLocalPosition(x, y, z);
+    }
   }
 }
