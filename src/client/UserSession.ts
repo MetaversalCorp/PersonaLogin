@@ -2,6 +2,7 @@ import { Session } from '../base/Session.js';
 import { ConnectionState } from '../types/index.js';
 import { getPFabric, LnGUser, LnGPersona } from '../mv/LnG.js';
 import { PersonaSession } from './PersonaSession.js';
+import { LoginClient } from './LoginClient.js';
 
 /**
  * UserSession — manages the authenticated user's RUser model and delegates
@@ -20,14 +21,15 @@ export class UserSession extends Session {
   private _ownPersonaList: LnGPersona[] = [];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private _friendsService: any = null;
-
+  private _loginClient: LoginClient | null = null;
   /**
    * Constructor now gets pLnG from MSF fabric via getPFabric().
    * This follows RP1Demo pattern: Model_Open + Attach in constructor.
    */
-  constructor(user: LnGUser) {
+  constructor(user: LnGUser, anyLoginClient: LoginClient | null = null) {
     super();
     this.user = user;
+    this._loginClient = anyLoginClient;
 
     // Get the real pLnG from MSF fabric (has Model_Open method)
     const pLnG = getPFabric()?.pLnG;
@@ -176,7 +178,7 @@ export class UserSession extends Session {
     lastName?: string
   ): void {
     // Use pLnG from this instance
-    this._personaSession = new PersonaSession(id, this.pLnG, this.pRUser, firstName, lastName);
+    this._personaSession = new PersonaSession(id, this.pLnG, this.pRUser, firstName, lastName, this._loginClient);
     void this._personaSession.connect().then(() => {
       this._initFriendsService();
       resolve();

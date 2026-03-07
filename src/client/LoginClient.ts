@@ -87,7 +87,7 @@ export class LoginClient {
     if (sessionSection) sessionSection.classList.toggle("d-none", section !== "session");
   }
 
-  private updateStatusBadge(type: "pending" | "success" | "error" | "logged-in"): void {
+  updateStatusBadge(type: "pending" | "success" | "error" | "logged-in" | "refresh-required"): void {
     const badge = document.querySelector<HTMLElement>("#status-panel .status-badge");
     if (!badge) return;
     badge.className = `status-badge ${type}`;
@@ -96,11 +96,12 @@ export class LoginClient {
       success: "Connected",
       error: "Error",
       "logged-in": "Logged In",
+      "refresh-required": "REFRESH REQUIRED",
     };
     badge.textContent = labels[type] ?? type;
   }
 
-  private appendStatus(message: string): void {
+  appendStatus(message: string): void {
     const content = this.el("status-content");
     if (!content) return;
     const line = document.createElement("div");
@@ -152,7 +153,7 @@ export class LoginClient {
     const user = this.pendingUser;
     this.pendingUser = null;
 
-    this.userSession = new UserSession(user);
+    this.userSession = new UserSession(user, this);
     await this.userSession.connect();
 
     this.appendStatus(`Entering world with persona ${personaId}…`);
@@ -312,11 +313,11 @@ export class LoginClient {
           this.showTfaRoute(resolve2FA);
         }
       );
-      this.appendStatus(`Authenticated as "${user.displayName}".`);
+      ///this.appendStatus(`Authenticated as "${user.displayName}".`);
       this.updateStatusBadge("success");
 
       this.pendingUser = user;
-      this.userSession = new UserSession(user);
+      this.userSession = new UserSession(user, this);
       await this.userSession.connect();
 
       // Wait for personas to be enumerated by onReadyState/Child_Enum

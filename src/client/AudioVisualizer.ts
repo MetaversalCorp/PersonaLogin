@@ -314,14 +314,14 @@ export class AudioVisualizer {
     const halfH = height / 2;
 
     // Diagnostic logging: once per second (≈60 frames) when capture is active
-    if (this.audioCapture?.isEnabled) {
-      const info = this.audioCapture.buffer.info;
-      if (info.available > 0 && this.frameCount % 60 === 0) {
-        const out = new Float32Array(100);
-        const read = this.audioCapture.buffer.read(out);
-        console.log('[drawFrame] Available:', info.available, 'Read:', read, 'Samples:', Array.from(out.slice(0, 10)));
-      }
-    }
+    // if (this.audioCapture?.isEnabled) {
+    //   const info = this.audioCapture.buffer.info;
+    //   if (info.available > 0 && this.frameCount % 60 === 0) {
+    //     const out = new Float32Array(100);
+    //     const read = this.audioCapture.buffer.read(out);
+    //     console.log('[drawFrame] Available:', info.available, 'Read:', read, 'Samples:', Array.from(out.slice(0, 10)));
+    //   }
+    // }
 
     // Background
     c.fillStyle = this.opts.backgroundColor;

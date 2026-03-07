@@ -1,6 +1,7 @@
 import { Session } from "../base/Session.js";
 import { ConnectionState, PersonaInfo } from "../types/index.js";
 import { InWorldSession } from "./InWorldSession.js";
+import { LoginClient } from "./LoginClient.js";
 
 /**
  * Wraps a model's Send() call in a Promise using the callback pattern required
@@ -78,14 +79,17 @@ export class PersonaSession extends Session {
   /** Minimum interval (ms) between avatar updates (~64 Hz, matching RP1 demo update rate). */
   private avatarUpdateIntervalMs: number = 15.625;
 
+  private _loginClient: LoginClient | null = null;
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  constructor(personaId: string, pLnG: any, pRUser: any, firstName?: string, lastName?: string) {
+  constructor(personaId: string, pLnG: any, pRUser: any, firstName?: string, lastName?: string, anyLoginClient: LoginClient | null = null) {
     super();
     this.personaId = personaId;
     this.pLnG = pLnG;
     this.pRUser = pRUser;
     this._firstName = firstName;
     this._lastName = lastName;
+    this._loginClient = anyLoginClient;
   }
 
   get personaInfo(): PersonaInfo | null {
@@ -179,10 +183,18 @@ export class PersonaSession extends Session {
         console.log(`[enterPersona] RPERSONA_ENTER result: ${result}`);
         if (result !== 0) {
           const errorName = this.getErrorName(result);
-          throw new Error(`RPERSONA_ENTER failed: ${result} (${errorName})`);
+          if (result == 3200) { // MV error code for "persona already in world"
+            console.warn(`[enterPersona] Persona ${this.personaId} is already in the world;\nWait 60 seconds and retry. (Remember to logout when leaving the page)`);
+            if (this._loginClient) {
+              this._loginClient.updateStatusBadge("refresh-required");
+
+              this._loginClient.appendStatus(`[enterPersona] Persona ${this.personaId} is still connected;`);
+              this._loginClient.appendStatus(`Wait 60 seconds and REFRESH. (Remember to logout when leaving the page)`);
+            }
+            throw new Error(`RPERSONA_ENTER failed: ${result} (${errorName})`);
+          }
         }
-      }
-    );
+      });
   }
 
   /**
