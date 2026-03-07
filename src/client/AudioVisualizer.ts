@@ -141,13 +141,13 @@ export class AudioVisualizer {
 
     console.log('[AudioVisualizer] Capture attached to decode interceptor');
 
-    // Initialize proximity avatar list and attach to Proximity
+    // Initialize proximity avatar list and register with RP1
     this.proximityList = new ProximityAvatarList();
-    this.proximityList.init(proximity);  // Pass Proximity instance directly
+    this.proximityList.init();  // Register with RP1
     this.proximityList.addObserver((avatars: AvatarInfo[]) => this.updateProximityPanel(avatars));
 
     this.proximityPanel = document.getElementById('proximity-panel');
-    console.log('[AudioVisualizer] Proximity listener attached');
+    console.log('[AudioVisualizer] Proximity avatar list initialized');
 
     this.startLoop();
     console.log('[AudioVisualizer] Attached to audio source; visualizer active');
@@ -185,11 +185,10 @@ export class AudioVisualizer {
 
   /**
    * Call this when local avatar position updates to keep distance calculations accurate.
+   * Position is now tracked automatically via the onUserReady RP1 callback.
    */
-  updateLocalPosition(x: number, y: number, z: number): void {
-    if (this.proximityList) {
-      this.proximityList.setLocalPosition(x, y, z);
-    }
+  updateLocalPosition(_x: number, _y: number, _z: number): void {
+    // Position is updated via RP1's onUserReady callback in ProximityAvatarList
   }
 
   /**
