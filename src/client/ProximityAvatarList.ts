@@ -10,23 +10,14 @@ export interface AvatarInfo {
 
 /**
  * Tracks nearby external avatars by listening to RP1 client events.
- * Extends IRP1ClientListener and registers with RP1.AddListener().
- * Implements the same callback pattern as clientBridge.js from RP1Demo.
+ * Implements the IRP1ClientListener callback interface (duck typing).
+ * Registers with RP1.AddListener() to receive avatar events.
  */
-declare class IRP1ClientListener {
-  constructor();
-}
-
-export class ProximityAvatarList extends IRP1ClientListener {
+export class ProximityAvatarList {
   private avatars: Map<number, AvatarInfo> = new Map();
   private localPosition: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 };
   private localPersonaID: number | null = null;
   private observers: Set<(avatars: AvatarInfo[]) => void> = new Set();
-
-  constructor() {
-    super();
-    console.log('[ProximityAvatarList] Constructor called');
-  }
 
   /**
    * Initialize: Register this listener with RP1.
