@@ -193,6 +193,15 @@ export class AudioFrameCapture {
   }
 
   /**
+   * Returns an AudioNode suitable for connecting to a tap or analysis chain.
+   * Used by ProximityAudioManager to wire the ScriptProcessorNode into the
+   * audio graph via AVStreamAudioPlayer.connectTap().
+   */
+  get processorNode(): AudioNode | null {
+    return this.scriptProcessorNode;
+  }
+
+  /**
    * Convenience helper: discard all samples currently in the ring buffer.
    * Useful before starting a new utterance for speech-to-text.
    */

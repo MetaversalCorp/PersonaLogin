@@ -127,6 +127,9 @@ export class AudioVisualizer {
     this.audioCapture = new AudioFrameCapture(audioManager);
     this.audioCapture.enable();
 
+    // Connect the capture to the audio stream via the player's gain node
+    audioManager.connectAudioCapture(this.audioCapture);
+
     this.startLoop();
     console.log('[AudioVisualizer] Attached to audio source; visualizer active');
   }
@@ -207,6 +210,9 @@ export class AudioVisualizer {
     this.frameSkipCounter = 0;
 
     if (this.audioCapture) {
+      if (this.audioManager) {
+        this.audioManager.disconnectAudioCapture(this.audioCapture);
+      }
       this.audioCapture.disable();
       this.audioCapture.dispose();
       this.audioCapture = null;
