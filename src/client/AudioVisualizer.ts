@@ -57,6 +57,9 @@ export class AudioVisualizer {
   private levelL: number = 0;
   private levelR: number = 0;
 
+  // Frame counter used for periodic diagnostic logging in drawFrame()
+  private frameCount: number = 0;
+
   // requestAnimationFrame handle
   private animFrameId: number | null = null;
 
@@ -130,6 +133,8 @@ export class AudioVisualizer {
     // Wire the capture into MVRP's decode stage to get raw PCM data
     audioManager.registerDecodeCapture(this.audioCapture);
 
+    console.log('[AudioVisualizer] Capture attached to decode interceptor');
+
     this.startLoop();
     console.log('[AudioVisualizer] Attached to audio source; visualizer active');
   }
@@ -142,6 +147,7 @@ export class AudioVisualizer {
   detachAudioSource(): void {
     if (this.audioManager) {
       this.audioManager.unregisterDecodeCapture();
+      console.log('[AudioVisualizer] Capture detached from decode interceptor');
     }
 
     if (this.audioCapture) {
@@ -301,9 +307,21 @@ export class AudioVisualizer {
   }
 
   private drawFrame(): void {
+    this.frameCount++;
+
     const { width, height } = this.canvas;
     const c = this.ctx2d;
     const halfH = height / 2;
+
+    // Diagnostic logging: once per second (≈60 frames) when capture is active
+    if (this.audioCapture?.isEnabled) {
+      const info = this.audioCapture.buffer.info;
+      if (info.available > 0 && this.frameCount % 60 === 0) {
+        const out = new Float32Array(100);
+        const read = this.audioCapture.buffer.read(out);
+        console.log('[drawFrame] Available:', info.available, 'Read:', read, 'Samples:', Array.from(out.slice(0, 10)));
+      }
+    }
 
     // Background
     c.fillStyle = this.opts.backgroundColor;
