@@ -1,5 +1,7 @@
 import type { ProximityAudioManager } from '../audio/ProximityAudioManager.js';
 import { AudioFrameCapture } from '../audio/AudioFrameCapture.js';
+import { ProximityAvatarList } from './ProximityAvatarList.js';
+import type { AvatarInfo } from './ProximityAvatarList.js';
 
 /** Options for configuring the AudioVisualizer. */
 export interface VisualizerOptions {
@@ -46,6 +48,10 @@ export class AudioVisualizer {
 
   // AudioFrameCapture tap used to read decoded PCM from the MVRP stream
   private audioCapture: AudioFrameCapture | null = null;
+
+  // ProximityAvatarList tracks nearby avatars and updates the proximity panel
+  private proximityList: ProximityAvatarList | null = null;
+  private proximityPanel: HTMLElement | null = null;
   // Scratch buffer for reading PCM samples from the audioCapture ring buffer
   private readonly readBuffer: Float32Array = new Float32Array(960);
 
@@ -135,6 +141,14 @@ export class AudioVisualizer {
 
     console.log('[AudioVisualizer] Capture attached to decode interceptor');
 
+    // Initialize proximity avatar list and register with RP1
+    this.proximityList = new ProximityAvatarList();
+    this.proximityList.init({ x: 0, y: 0, z: 0 }); // Will be updated by onUserReady
+    this.proximityList.addObserver((avatars: AvatarInfo[]) => this.updateProximityPanel(avatars));
+
+    this.proximityPanel = document.getElementById('proximity-panel');
+    console.log('[AudioVisualizer] Proximity panel initialized');
+
     this.startLoop();
     console.log('[AudioVisualizer] Attached to audio source; visualizer active');
   }
@@ -162,6 +176,15 @@ export class AudioVisualizer {
     }
 
     this.audioManager = null;
+  }
+
+  /**
+   * Call this when local avatar position updates to keep distance calculations accurate.
+   */
+  updateLocalPosition(x: number, y: number, z: number): void {
+    if (this.proximityList) {
+      this.proximityList.setLocalPosition(x, y, z);
+    }
   }
 
   /**
@@ -249,6 +272,12 @@ export class AudioVisualizer {
     }
 
     this.audioManager = null;
+
+    if (this.proximityList) {
+      this.proximityList.dispose();
+      this.proximityList = null;
+    }
+    this.proximityPanel = null;
 
     if (this.canvas.parentNode) {
       this.canvas.parentNode.removeChild(this.canvas);
@@ -365,5 +394,22 @@ export class AudioVisualizer {
       c.lineTo(x, centerY + lineH);
     }
     c.stroke();
+  }
+
+  /**
+   * Update the proximity panel DOM element with the current list of nearby avatars.
+   */
+  private updateProximityPanel(avatars: AvatarInfo[]): void {
+    if (!this.proximityPanel) return;
+
+    if (avatars.length === 0) {
+      this.proximityPanel.innerHTML = '<em>No nearby avatars</em>';
+      return;
+    }
+
+    const items = avatars
+      .map((a) => `<li>${a.name} (${a.distance.toFixed(1)}m)</li>`)
+      .join('');
+    this.proximityPanel.innerHTML = `<ul>${items}</ul>`;
   }
 }
