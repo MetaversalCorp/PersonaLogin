@@ -532,8 +532,17 @@
       }
 
       @keyframes stt-pulse {
-         0%, 100% { opacity: 1; transform: scale(1); }
-         50%       { opacity: 0.3; transform: scale(0.75); }
+
+         0%,
+         100% {
+            opacity: 1;
+            transform: scale(1);
+         }
+
+         50% {
+            opacity: 0.3;
+            transform: scale(0.75);
+         }
       }
 
       /* ── Lat/Lon fine-tuning controls ────────────────────────────────────── */
@@ -588,8 +597,15 @@
       }
 
       @keyframes btn-pulse {
-         0%, 100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.45); }
-         50%       { box-shadow: 0 0 0 9px rgba(255, 255, 255, 0); }
+
+         0%,
+         100% {
+            box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.45);
+         }
+
+         50% {
+            box-shadow: 0 0 0 9px rgba(255, 255, 255, 0);
+         }
       }
    </style>
 </head>
@@ -791,70 +807,71 @@
                <!-- Left column: teleport controls -->
                <div class="teleport-controls-col">
 
-            <div class="teleport-form-row-4">
-               <div class="teleport-form-group">
-                  <label>Celestial ID (pParent)</label>
-                  <input type="text" id="celestial-id" placeholder="e.g., 104" value="104">
-               </div>
-               <div class="teleport-form-group">
-                  <label>Latitude</label>
-                  <div class="lat-lon-controls">
-                     <button type="button" class="lat-lon-btn" id="lat-decr">−</button>
-                     <input type="number" id="teleport-latitude" placeholder="1" step="0.0001" value="1" min="-90"
-                        max="90">
-                     <button type="button" class="lat-lon-btn" id="lat-incr">+</button>
+                  <div class="teleport-form-row-4">
+                     <div class="teleport-form-group">
+                        <label>Celestial ID (pParent)</label>
+                        <input type="text" id="celestial-id" placeholder="e.g., 104" value="104">
+                     </div>
+                     <div class="teleport-form-group">
+                        <label>Latitude</label>
+                        <div class="lat-lon-controls">
+                           <button type="button" class="lat-lon-btn" id="lat-decr">−</button>
+                           <input type="number" id="teleport-latitude" placeholder="1" step="0.0001" value="1" min="-90"
+                              max="90">
+                           <button type="button" class="lat-lon-btn" id="lat-incr">+</button>
+                        </div>
+                     </div>
+                     <div class="teleport-form-group">
+                        <label>Longitude</label>
+                        <div class="lat-lon-controls">
+                           <button type="button" class="lat-lon-btn" id="lon-decr">−</button>
+                           <input type="number" id="teleport-longitude" placeholder="1" step="0.0001" value="1"
+                              min="-180" max="180">
+                           <button type="button" class="lat-lon-btn" id="lon-incr">+</button>
+                        </div>
+                     </div>
+                     <div class="teleport-form-group">
+                        <label>Radius (meters)</label>
+                        <div class="lat-lon-controls">
+                           <button type="button" class="lat-lon-btn" id="radius-decr">−</button>
+                           <input type="number" id="teleport-radius" placeholder="6371001.8" step="0.1"
+                              value="6371001.8">
+                           <button type="button" class="lat-lon-btn" id="radius-incr">+</button>
+                        </div>
+                     </div>
                   </div>
-               </div>
-               <div class="teleport-form-group">
-                  <label>Longitude</label>
-                  <div class="lat-lon-controls">
-                     <button type="button" class="lat-lon-btn" id="lon-decr">−</button>
-                     <input type="number" id="teleport-longitude" placeholder="1" step="0.0001" value="1" min="-180"
-                        max="180">
-                     <button type="button" class="lat-lon-btn" id="lon-incr">+</button>
+
+                  <div class="teleport-buttons-row">
+                     <button class="teleport-button" id="teleport-now-button">
+                        <i class="fa-solid fa-location-arrow"></i> Teleport
+                     </button>
+                     <button class="teleport-button" id="teleport-button">
+                        <i class="fa-solid fa-satellite-dish"></i> Start Avatar Updates
+                     </button>
                   </div>
-               </div>
-               <div class="teleport-form-group">
-                  <label>Radius (meters)</label>
-                  <div class="lat-lon-controls">
-                     <button type="button" class="lat-lon-btn" id="radius-decr">−</button>
-                     <input type="number" id="teleport-radius" placeholder="6371001.8" step="0.1" value="6371001.8">
-                     <button type="button" class="lat-lon-btn" id="radius-incr">+</button>
+
+                  <div style="margin-top: 12px;">
+                     <label style="display: block; font-size: 12px; margin-bottom: 8px; font-weight: 600;">Direct
+                        Teleport Locations:</label>
+                     <button type="button" class="location-preset" data-celestial="104" data-lat="1"
+                        data-lon="1.00501054" data-radius="6371001.75">RP1 Start</button>
+                     <button type="button" class="location-preset" data-celestial="104" data-lat="1" data-lon="1"
+                        data-radius="6371001.75">Plaza</button>
                   </div>
-               </div>
-            </div>
 
-            <div class="teleport-buttons-row">
-               <button class="teleport-button" id="teleport-now-button">
-                  <i class="fa-solid fa-location-arrow"></i> Teleport
-               </button>
-               <button class="teleport-button" id="teleport-button">
-                  <i class="fa-solid fa-satellite-dish"></i> Start Avatar Updates
-               </button>
-            </div>
-
-            <div style="margin-top: 12px;">
-               <label style="display: block; font-size: 12px; margin-bottom: 8px; font-weight: 600;">Quick
-                  Locations:</label>
-               <button type="button" class="location-preset" data-celestial="104" data-lat="1" data-lon="1.00501054"
-                  data-radius="6371001.75">RP1 Start</button>
-               <button type="button" class="location-preset" data-celestial="104" data-lat="1" data-lon="1"
-                  data-radius="6371001.75">Plaza</button>
-            </div>
-
-            <div class="current-location-display">
-               <div class="label">Current Location:</div>
-               <div class="value">
-                  <div>Celestial (pParent): <span id="current-celestial">104</span></div>
-                  <div>Position: <span id="current-position">40.7128°N, 74.0060°W, 0m</span></div>
-               </div>
-               <div class="coordinates-display">
-                  <div><strong>Cartesian Coordinates:</strong></div>
-                  <div>dX: <span id="coord-dx">0.00</span></div>
-                  <div>dY: <span id="coord-dy">0.00</span></div>
-                  <div>dZ: <span id="coord-dz">0.00</span></div>
-               </div>
-            </div>
+                  <div class="current-location-display">
+                     <div class="label">Current Location:</div>
+                     <div class="value">
+                        <div>Celestial (pParent): <span id="current-celestial">104</span></div>
+                        <div>Position: <span id="current-position">40.7128°N, 74.0060°W, 0m</span></div>
+                     </div>
+                     <div class="coordinates-display">
+                        <div><strong>Cartesian Coordinates:</strong></div>
+                        <div>dX: <span id="coord-dx">0.00</span></div>
+                        <div>dY: <span id="coord-dy">0.00</span></div>
+                        <div>dZ: <span id="coord-dz">0.00</span></div>
+                     </div>
+                  </div>
 
                </div><!-- /.teleport-controls-col -->
 
@@ -864,7 +881,7 @@
                   <div class="audio-visualizer-container" id="audio-visualizer-container"></div>
 
                   <!-- Inbound Audio Capture controls -->
-                  <div class="stt-panel" id="stt-panel" style="display:none;">
+                  <!-- <div class="stt-panel" id="stt-panel" style="display:none;">
                      <h6><i class="fa-solid fa-wave-square"></i> Inbound Audio Capture</h6>
                      <div class="stt-controls">
                         <button class="btn btn-sm btn-outline-secondary"  id="stt-enable-btn">Enable Capture</button>
@@ -879,25 +896,25 @@
                      </div>
                      <div class="stt-frame-info" id="stt-frame-info" style="display:none;">
                         <span class="stt-live-dot"></span>Updates: <span id="stt-frame-count">0</span> &nbsp;|&nbsp; <span id="stt-fps">0.0</span> fps
-                     </div>
-                  </div><!-- /.stt-panel -->
-               </div><!-- /.audio-visualizer-col -->
+                     </div> -->
+               </div><!-- /.stt-panel -->
+            </div><!-- /.audio-visualizer-col -->
 
-            </div><!-- /.teleport-panel-inner -->
+         </div><!-- /.teleport-panel-inner -->
+      </div>
+
+      <div class="card bg-light rounded-5">
+         <div class="card-header">
+            <h5 class="mb-0"><i class="fa-solid fa-database"></i> Persona Session &amp; Puppet Data</h5>
          </div>
-
-         <div class="card bg-light rounded-5">
-            <div class="card-header">
-               <h5 class="mb-0"><i class="fa-solid fa-database"></i> Persona Session &amp; Puppet Data</h5>
-            </div>
-            <div class="card-body">
-               <div id="session-info"
-                  style="background-color: white; border: 1px solid #dee2e6; border-radius: 4px; padding: 15px; font-family: 'Courier New', monospace; font-size: 12px;">
-                  Loading session data...
-               </div>
+         <div class="card-body">
+            <div id="session-info"
+               style="background-color: white; border: 1px solid #dee2e6; border-radius: 4px; padding: 15px; font-family: 'Courier New', monospace; font-size: 12px;">
+               Loading session data...
             </div>
          </div>
       </div>
+   </div>
    </div>
 
    <!-- Status Panel at Bottom -->
@@ -941,15 +958,15 @@
          // ── Speech-to-Text demo wiring ───────────────────────────────────────
          let sttCapture = null;
 
-         const sttPanel      = document.getElementById('stt-panel');
-         const sttEnableBtn  = document.getElementById('stt-enable-btn');
+         const sttPanel = document.getElementById('stt-panel');
+         const sttEnableBtn = document.getElementById('stt-enable-btn');
          const sttDisableBtn = document.getElementById('stt-disable-btn');
-         const sttClearBtn   = document.getElementById('stt-clear-btn');
-         const sttStatusEl   = document.getElementById('stt-status-text');
-         const sttInfoEl     = document.getElementById('stt-buffer-info');
-         const sttFrameInfoEl   = document.getElementById('stt-frame-info');
-         const sttFrameCountEl  = document.getElementById('stt-frame-count');
-         const sttFpsEl         = document.getElementById('stt-fps');
+         const sttClearBtn = document.getElementById('stt-clear-btn');
+         const sttStatusEl = document.getElementById('stt-status-text');
+         const sttInfoEl = document.getElementById('stt-buffer-info');
+         const sttFrameInfoEl = document.getElementById('stt-frame-info');
+         const sttFrameCountEl = document.getElementById('stt-frame-count');
+         const sttFpsEl = document.getElementById('stt-fps');
 
          let sttFrameCount = 0;
          let sttFpsCounter = 0;
@@ -1003,7 +1020,7 @@
             if (!sttCapture) {
                const meta = audioManager.getAudioMetadata();
                sttCapture = new AudioFrameCapture(audioManager, {
-                  sampleRate:   meta?.sampleRate   ?? 48000,
+                  sampleRate: meta?.sampleRate ?? 48000,
                   channelCount: 2,
                });
             }
@@ -1013,15 +1030,15 @@
             sttFpsCounter = 0;
             sttLastFpsTime = 0;
             if (sttStatusEl) sttStatusEl.textContent = 'Active';
-            if (sttEnableBtn)  sttEnableBtn.disabled  = true;
+            if (sttEnableBtn) sttEnableBtn.disabled = true;
             if (sttDisableBtn) sttDisableBtn.disabled = false;
             requestAnimationFrame(updateSttInfo);
          });
 
          sttDisableBtn?.addEventListener('click', () => {
             sttCapture?.disable();
-            if (sttStatusEl)  sttStatusEl.textContent  = 'Inactive';
-            if (sttEnableBtn)  sttEnableBtn.disabled  = false;
+            if (sttStatusEl) sttStatusEl.textContent = 'Inactive';
+            if (sttEnableBtn) sttEnableBtn.disabled = false;
             if (sttDisableBtn) sttDisableBtn.disabled = true;
             if (sttFrameInfoEl) sttFrameInfoEl.style.display = 'none';
          });

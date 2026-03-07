@@ -118,7 +118,7 @@ export class InWorldSession extends Session {
       return;
     }
 
-    console.log(`[InWorldSession] Sending UPDATE to reposition to ${celestialId}:`, position);
+    ///console.debug(`[InWorldSession] Sending UPDATE to reposition to ${celestialId}:`, position);
 
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -177,9 +177,9 @@ export class InWorldSession extends Session {
         abData: new Uint8Array(0),
       };
 
-      console.log('[InWorldSession] Calling pRPersona.Send("UPDATE", ...)');
+      ///console.debug('[InWorldSession] Calling pRPersona.Send("UPDATE", ...)');
       pRPersona.Send('UPDATE', updatePayload);
-      console.log('[InWorldSession] UPDATE sent successfully');
+      ///console.debug('[InWorldSession] UPDATE sent successfully');
     } catch (err) {
       console.error('[InWorldSession] UPDATE Send failed:', err);
       throw err;
