@@ -82,29 +82,40 @@ export class ProximityAudioManager {
     }
 
     try {
-      // Create the MV proximity listener. Its internal MV.MVRP.Audio instance
-      // handles all decoding (both codec 0 PCM16 and codec 1 delta-compression)
-      // and routes decoded samples to AudioContext.destination automatically.
       this.proximity = new MV.MVRP.Proximity(pClient);
-
       const mvAudio = this.proximity.GetAudio();
-
-      // Start(false) → creates AudioContext without requesting microphone access.
-      // Pass true instead if microphone capture is also required.
       mvAudio.Start(false);
 
-      // Build the spatial audio layer on top of the same AudioContext so that
-      // all nodes share the same sample clock.
-      const ctx: AudioContext = mvAudio.m_pContext;
-      if (ctx) {
-        this.audioContext = ctx;
-        this.audioPlayer = new AVStreamAudioPlayer(ctx);
+      // Hook into both codec decoders
+      const decodedAudioFrames: Float32Array[] = [];
 
-        console.log('[ProximityAudioManager] AVStreamAudioPlayer ready (sampleRate:', ctx.sampleRate, 'Hz)');
-      }
+      const originalDecode0 = mvAudio.Decode[0];
+      const originalDecode1 = mvAudio.Decode[1];
 
-      this._started = true;
-      console.log('[ProximityAudioManager] Proximity audio started');
+      mvAudio.Decode[0] = function (channelData: any, wSamples: number, byteStream: any) {
+        const result = originalDecode0.call(this, channelData, wSamples, byteStream);
+        console.log('[Decode0] Decoded', wSamples, 'samples into', channelData);
+
+        // Read from m_Buffer after decode
+        if (mvAudio.m_Buffer?.asSample) {
+          const samples = Array.from(mvAudio.m_Buffer.asSample.slice(0, 20));
+          console.log('m_Buffer samples after decode:', samples);
+        }
+
+        return result;
+      };
+
+      mvAudio.Decode[1] = function (channelData: any, wSamples: number, byteStream: any) {
+        const result = originalDecode1.call(this, channelData, wSamples, byteStream);
+        console.log('[Decode1] Decoded', wSamples, 'samples into', channelData);
+
+        if (mvAudio.m_Buffer?.asSample) {
+          const samples = Array.from(mvAudio.m_Buffer.asSample.slice(0, 20));
+          console.log('m_Buffer samples after decode:', samples);
+        }
+
+        return result;
+      };
     } catch (err) {
       console.error('[ProximityAudioManager] Failed to start audio:', err);
     }
@@ -261,9 +272,9 @@ export class ProximityAudioManager {
     const mvrpAudio: any = this.proximity.GetAudio();
     if (!mvrpAudio) return null;
     return {
-      sampleRate:      mvrpAudio.m_nSampleRate    ?? 48000,
+      sampleRate: mvrpAudio.m_nSampleRate ?? 48000,
       samplesPerSlice: mvrpAudio.m_nSamples_Slice ?? 960,
-      bytesPerSample:  mvrpAudio.m_nBytes_Sample  ?? 2,
+      bytesPerSample: mvrpAudio.m_nBytes_Sample ?? 2,
     };
   }
 
