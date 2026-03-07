@@ -43,6 +43,43 @@ export class ProximityAvatarList {
   }
 
   /**
+   * Update the local persona's ID and Cartesian position.
+   * Called from InWorldSession.teleportTo() whenever the user teleports.
+   * This keeps the proximity list synchronized with the actual avatar position.
+   *
+   * @param personaID The local persona's ID
+   * @param position The Cartesian position {x, y, z} in global coordinates
+   */
+  public updateLocalPosition(personaID: number, position: { x: number; y: number; z: number }): void {
+    this.localPersonaID = personaID;
+    this.localPosition = { x: position.x, y: position.y, z: position.z };
+    console.log('[ProximityAvatarList] Local position updated: persona', personaID, 'at',
+      position.x.toFixed(2), position.y.toFixed(2), position.z.toFixed(2));
+
+    // Recalculate distances for all tracked avatars
+    this.recalculateDistances();
+  }
+
+  /**
+   * Recalculate distances for all tracked avatars after local position changes.
+   */
+  private recalculateDistances(): void {
+    let changed = false;
+    for (const [, avatar] of this.avatars) {
+      const newDistance = this.calculateDistance(avatar.position);
+      if (newDistance !== avatar.distance) {
+        avatar.distance = newDistance;
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      console.log('[ProximityAvatarList] Distances recalculated for', this.avatars.size, 'avatars');
+      this.notifyObservers();
+    }
+  }
+
+  /**
    * Intercept Proximity's Emit method to capture onAvatarUpdate events.
    * Similar to setupDecodeInterception in ProximityAudioManager.
    */
@@ -65,7 +102,7 @@ export class ProximityAvatarList {
       // Intercept onAvatarUpdate event
       if (eventName === 'onAvatarUpdate' && args.length > 0) {
         const eventData = args[0];
-        console.log('[ProximityAvatarList] Intercepted onAvatarUpdate:', eventData);
+        console.log('[ProximityAvatarList] Intercepted onAvatarUpdate');
         self.handleAvatarUpdate(eventData);
       } else if (eventName === 'onModelClose' && args.length > 0) {
         const dwRPersonaIx = args[0];
@@ -76,9 +113,9 @@ export class ProximityAvatarList {
         console.log('[ProximityAvatarList] Intercepted onModelHide:', dwRPersonaIx);
         self.onModelHide(dwRPersonaIx);
       } else if (eventName === 'onUserReady' && args.length >= 5) {
-        const [nAvatarIx, dwRPersonaIx, nX, nY, nZ] = args;
+        const [, dwRPersonaIx, nX, nY, nZ] = args;
         console.log('[ProximityAvatarList] Intercepted onUserReady:', dwRPersonaIx);
-        self.onUserReady(nAvatarIx, dwRPersonaIx, nX, nY, nZ);
+        self.updateLocalPosition(dwRPersonaIx, { x: nX, y: nY, z: nZ });
       } else if (eventName === 'onLogout_Client') {
         console.log('[ProximityAvatarList] Intercepted onLogout_Client');
         self.onLogout_Client(args[0] || false);
@@ -175,15 +212,6 @@ export class ProximityAvatarList {
 
     console.log('[ProximityAvatarList] Avatar updated:', dwRPersonaIx, name, distance.toFixed(2) + 'm', isNew ? '(NEW)' : '(UPDATE)');
     this.notifyObservers();
-  }
-
-  /**
-   * Avatar event callback: Local avatar has entered the world.
-   */
-  onUserReady(nAvatarIx: number, dwRPersonaIx: number, nX: number, nY: number, nZ: number): void {
-    this.localPersonaID = dwRPersonaIx;
-    this.localPosition = { x: nX, y: nY, z: nZ };
-    console.log('[ProximityAvatarList] onUserReady: Local avatar', dwRPersonaIx, 'at', nX, nY, nZ);
   }
 
   /**
