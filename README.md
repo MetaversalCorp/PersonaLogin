@@ -87,6 +87,27 @@ No `.env` file is required for local development. Server endpoints and session p
 1. `npm run dev` starts the local webserver on port 8090
 2. In a web browser, go to URL `http://localhost:8090`
 
+### The UI controls
+<img width="1467" height="933" alt="image" src="https://github.com/user-attachments/assets/0768f60c-c881-4dbf-b7d6-291727c6ceeb" />
+
+1. **Logout** Remember to logout from the page before refreshing or there might be a stale session delay
+
+2. **Geo Pos** Enter Celestial ID 104 for EARTH, then desired Latitude and Longitude and Radius (6371000) + Height
+
+3. Increments of approximately 10m on the [ - ] and [ + ] buttons for lat and lon
+
+4. **Teleport** Executes a single Avatar Update message to the server
+
+5. **Start Avatar Update** Sents Avatar Update continuously
+
+6. **Direct Teleports** Takes you to *RP1 Start* and *Plaza* which is occupied by roaming bots constantly speaking
+
+7. **Current Location** Cartesian co-ordinates relative to Earth Center
+
+8. **Audio graph** Showing the stereo levels at the current location
+
+The audio at the location will also be audibly playing back
+   
 ### What PersonaLogin Does
 
 PersonaLogin is the member-facing login and avatar entry client for the **Metaversal RP1** platform. It authenticates users via the MV LnG service, lets them pick a persona, loads their avatar model, and places the avatar into the virtual world. Once in-world, users can reposition their avatar (teleport) to any location on any celestial body.
