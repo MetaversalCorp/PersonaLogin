@@ -146,26 +146,30 @@ export class ProximityAvatarList {
       return;
     }
 
-    const dwRPersonaIx = avatarUpdateEx.dwRPersonaIx;
+    const dwRPersonaIx = avatarUpdateEx.twRPersonaIx;
 
     // Skip the local avatar
     if (dwRPersonaIx === this.localPersonaID) {
       return;
     }
 
-    // Extract position from MVO_RAvatar_State.MVO_RPosition_Head.nX/Y/Z
-    const mvoState = avatarUpdateEx.MVO_RAvatar_State;
-    if (!mvoState || !mvoState.MVO_RPosition_Head) {
+    // Extract position from pState.pPosition_Head.pRelative.vPosition.dX/dY/dZ
+    const pState = avatarUpdateEx.pState;
+    if (!pState || !pState.pPosition_Head) {
       console.warn('[ProximityAvatarList] No position data in avatar update');
       return;
     }
 
-    const positionHead = mvoState.MVO_RPosition_Head;
+    const vPosition = pState.pPosition_Head?.pRelative?.vPosition;
+    if (!vPosition) {
+      console.warn('[ProximityAvatarList] No vPosition in pPosition_Head');
+      return;
+    }
 
     const position = {
-      x: positionHead.nX,
-      y: positionHead.nY,
-      z: positionHead.nZ,
+      x: vPosition.dX,
+      y: vPosition.dY,
+      z: vPosition.dZ,
     };
 
     const distance = this.calculateDistance(position);
