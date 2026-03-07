@@ -248,6 +248,7 @@ export class ProximityAudioManager {
    */
   registerDecodeCapture(capture: AudioFrameCapture): void {
     this.decodeFrameCapture = capture;
+    console.log('[ProximityAudioManager] AudioFrameCapture registered for decode interception');
   }
 
   /**
@@ -257,6 +258,7 @@ export class ProximityAudioManager {
    */
   unregisterDecodeCapture(): void {
     this.decodeFrameCapture = null;
+    console.log('[ProximityAudioManager] AudioFrameCapture unregistered');
   }
 
   /**
@@ -274,7 +276,7 @@ export class ProximityAudioManager {
     const originalDecode1: any = mvAudio.Decode[1];
 
     // Arrow function so that `this` always refers to the ProximityAudioManager.
-    // The mvAudio context is forwarded explicitly to the original function.
+    // The mvAudio context and codec label are forwarded explicitly.
     const decodeInterceptor = (
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       mvAudioCtx: any,
@@ -284,12 +286,17 @@ export class ProximityAudioManager {
       byteStream: any,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       originalFn: any,
+      codecLabel: string,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ): any => {
       const result = originalFn.call(mvAudioCtx, channelData, wSamples, byteStream);
 
       // Write decoded samples to frame capture if registered
       if (this.decodeFrameCapture && channelData[0] && channelData[1]) {
+        console.log(`[${codecLabel}] Decoded`, wSamples, 'samples');
+        console.log(`[${codecLabel}] channelData[0][0:10]:`, Array.from(channelData[0].slice(0, 10)));
+        console.log(`[${codecLabel}] channelData[1][0:10]:`, Array.from(channelData[1].slice(0, 10)));
+
         this.writeDecodedSamplesToCapture(channelData, wSamples);
       }
 
@@ -305,7 +312,7 @@ export class ProximityAudioManager {
       byteStream: any,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ): any {
-      return decodeInterceptor(this, channelData, wSamples, byteStream, originalDecode0);
+      return decodeInterceptor(this, channelData, wSamples, byteStream, originalDecode0, 'Decode0');
     };
 
     mvAudio.Decode[1] = function(
@@ -317,7 +324,7 @@ export class ProximityAudioManager {
       byteStream: any,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ): any {
-      return decodeInterceptor(this, channelData, wSamples, byteStream, originalDecode1);
+      return decodeInterceptor(this, channelData, wSamples, byteStream, originalDecode1, 'Decode1');
     };
   }
 
@@ -344,7 +351,10 @@ export class ProximityAudioManager {
       this.decodeInterleavedBuffer[i * 2 + 1] = right[i];
     }
 
+    console.log('[writeDecodedSamples] interleaved[0:20]:', Array.from(this.decodeInterleavedBuffer.slice(0, 20)));
+
     this.decodeFrameCapture.buffer.write(this.decodeInterleavedBuffer, 0, needed);
+    console.log('[writeDecodedSamples] Wrote', needed, 'interleaved samples to capture');
   }
 
   /**
