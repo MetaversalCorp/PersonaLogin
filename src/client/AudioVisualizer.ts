@@ -401,7 +401,8 @@ export class AudioVisualizer {
   }
 
   /**
-   * Update the proximity panel DOM element with the current list of nearby avatars.
+   * Update the proximity panel with a table of the 10 closest avatars.
+   * DOM nodes are constructed via the DOM API to prevent XSS from avatar names.
    */
   private updateProximityPanel(avatars: AvatarInfo[]): void {
     if (!this.proximityPanel) return;
@@ -426,26 +427,44 @@ export class AudioVisualizer {
     header.textContent = `Nearby Avatars (${avatars.length})`;
     this.proximityPanel.appendChild(header);
 
-    for (const a of avatars) {
-      const row = document.createElement('div');
-      row.className = 'proximity-row';
+    // Build table of 10 closest avatars
+    const table = document.createElement('table');
+    table.className = 'proximity-table';
 
-      const idSpan = document.createElement('span');
-      idSpan.className = 'proximity-id';
-      idSpan.textContent = `[${a.personaID}]`;
-
-      const nameSpan = document.createElement('span');
-      nameSpan.className = 'proximity-name';
-      nameSpan.textContent = a.name;
-
-      const distSpan = document.createElement('span');
-      distSpan.className = 'proximity-distance';
-      distSpan.textContent = `${a.distance.toFixed(2)}m`;
-
-      row.appendChild(idSpan);
-      row.appendChild(nameSpan);
-      row.appendChild(distSpan);
-      this.proximityPanel.appendChild(row);
+    // Table header
+    const thead = document.createElement('thead');
+    const headerRow = document.createElement('tr');
+    for (const label of ['Avatar ID', 'Name', 'Distance']) {
+      const th = document.createElement('th');
+      th.textContent = label;
+      headerRow.appendChild(th);
     }
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+
+    // Table body
+    const tbody = document.createElement('tbody');
+    for (const a of avatars) {
+      const tr = document.createElement('tr');
+
+      const idTd = document.createElement('td');
+      idTd.className = 'proximity-id';
+      idTd.textContent = String(a.personaID);
+
+      const nameTd = document.createElement('td');
+      nameTd.className = 'proximity-name';
+      nameTd.textContent = a.name;
+
+      const distTd = document.createElement('td');
+      distTd.className = 'proximity-distance';
+      distTd.textContent = `${a.distance.toFixed(2)}m`;
+
+      tr.appendChild(idTd);
+      tr.appendChild(nameTd);
+      tr.appendChild(distTd);
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+    this.proximityPanel.appendChild(table);
   }
 }
