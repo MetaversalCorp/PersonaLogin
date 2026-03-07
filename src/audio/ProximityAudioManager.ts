@@ -3,6 +3,7 @@
 declare const MV: any;
 
 import { AVStreamAudioPlayer } from './AVStreamAudioPlayer.js';
+import type { AudioFrameCapture } from './AudioFrameCapture.js';
 
 /**
  * ProximityAudioManager – owns the MV.MVRP.Proximity instance and wires it to
@@ -26,13 +27,23 @@ import { AVStreamAudioPlayer } from './AVStreamAudioPlayer.js';
  *   Callers that need per-source volume or 3-D positioning can obtain the player
  *   via getAudioPlayer() and route decoded buffers through it.
  *
+ * Decode interception
+ * ───────────────────
+ *   MVRP routes decoded audio directly to the native/WASM speaker path,
+ *   bypassing Web Audio API graph nodes.  To capture the raw PCM samples,
+ *   setupDecodeInterception() wraps mvAudio.Decode[0] and mvAudio.Decode[1]
+ *   so that whenever a frame is decoded the channelData is forwarded to a
+ *   registered AudioFrameCapture instance.  Playback is unaffected.
+ *
+ *   registerDecodeCapture(capture)  – wire an AudioFrameCapture into the path
+ *   unregisterDecodeCapture()       – remove the current capture
+ *
  * PCM buffer access
  * ─────────────────
  *   getAudioBuffer()   – returns the live MVRP `m_Buffer` for direct PCM access
  *   getAudioMetadata() – returns sampleRate, samplesPerSlice, bytesPerSample
  *   These are available for advanced callers that need direct access to the
- *   MVRP internal buffer.  AudioFrameCapture instead taps the live Web Audio
- *   signal via an AnalyserNode connected to the AVStreamAudioPlayer's GainNode.
+ *   MVRP internal buffer.
  *
  * Mute / deaf controls
  * ─────────────────────
@@ -47,6 +58,7 @@ export class ProximityAudioManager {
   private audioPlayer: AVStreamAudioPlayer | null = null;
   private audioContext: AudioContext | null = null;
   private _started: boolean = false;
+  private decodeFrameCapture: AudioFrameCapture | null = null;
 
   /**
    * @param pLnG  The active pLnG service client from the MSF fabric
@@ -98,6 +110,9 @@ export class ProximityAudioManager {
       if (ctx) {
         this.audioContext = ctx;
         this.audioPlayer = new AVStreamAudioPlayer(ctx);
+
+        // Hook into MVRP decode to capture raw PCM samples
+        this.setupDecodeInterception(mvAudio);
 
         console.log('[ProximityAudioManager] AVStreamAudioPlayer ready (sampleRate:', ctx.sampleRate, 'Hz)');
       }
@@ -191,6 +206,144 @@ export class ProximityAudioManager {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getProximity(): any {
     return this.proximity;
+  }
+
+  /**
+   * Connect an AudioFrameCapture instance to the audio stream.
+   * Designed to be called after the player is available (i.e. after start()).
+   * @param capture The AudioFrameCapture instance to wire in.
+   */
+  connectAudioCapture(capture: AudioFrameCapture): void {
+    if (!this.audioPlayer) return;
+    const node = capture.processorNode;
+    if (node) {
+      this.audioPlayer.connectTap(node);
+    }
+  }
+
+  /**
+   * Disconnect a previously wired AudioFrameCapture.
+   * @param capture The AudioFrameCapture instance to disconnect.
+   */
+  disconnectAudioCapture(capture: AudioFrameCapture): void {
+    if (!this.audioPlayer) return;
+    const node = capture.processorNode;
+    if (node) {
+      this.audioPlayer.disconnectTap(node);
+    }
+  }
+
+  /**
+   * Register an AudioFrameCapture instance to receive decoded samples directly
+   * from the MVRP decode stage.  MVRP passes `channelData` as a pre-interleaved
+   * Float32Array (L0, R0, L1, R1, …), which is written directly to the capture's
+   * ring buffer on every decode call.
+   *
+   * Call this after {@link start} to wire a capture into the decode path.
+   * Only one capture may be registered at a time; calling again replaces any
+   * previously registered capture.
+   *
+   * @param capture The AudioFrameCapture instance to wire in.
+   */
+  registerDecodeCapture(capture: AudioFrameCapture): void {
+    this.decodeFrameCapture = capture;
+    console.log('[ProximityAudioManager] AudioFrameCapture registered for decode interception');
+  }
+
+  /**
+   * Unregister the current decode capture.
+   * After this call, decoded samples are no longer forwarded to a capture
+   * instance.  Playback is unaffected.
+   */
+  unregisterDecodeCapture(): void {
+    this.decodeFrameCapture = null;
+    console.log('[ProximityAudioManager] AudioFrameCapture unregistered');
+  }
+
+  /**
+   * Hook into MVRP's decode functions to intercept decoded PCM samples.
+   * Wraps mvAudio.Decode[0] (codec 0 / PCM16) and mvAudio.Decode[1]
+   * (codec 1 / delta) so that channelData is forwarded to the registered
+   * {@link decodeFrameCapture} on every decode call.  The original decode
+   * function is always called first so playback is unaffected.
+   *
+   * Note: MVRP passes `channelData` as a pre-interleaved Float32Array with
+   * the layout [L0, R0, L1, R1, …], not as separate per-channel arrays.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private setupDecodeInterception(mvAudio: any): void {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const originalDecode0: any = mvAudio.Decode[0];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const originalDecode1: any = mvAudio.Decode[1];
+
+    // Arrow function so that `this` always refers to the ProximityAudioManager.
+    // The mvAudio context and codec label are forwarded explicitly.
+    const decodeInterceptor = (
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      mvAudioCtx: any,
+      channelData: Float32Array,
+      wSamples: number,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      byteStream: any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      originalFn: any,
+      codecLabel: string,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ): any => {
+      const result = originalFn.call(mvAudioCtx, channelData, wSamples, byteStream);
+
+      // Write decoded samples to frame capture if registered
+      if (this.decodeFrameCapture) {
+        console.log(`[${codecLabel}] Decoded`, wSamples, 'samples');
+        console.log(`[${codecLabel}] channelData[0:10]:`, Array.from(channelData.slice(0, 10)));
+
+        this.writeDecodedSamplesToCapture(channelData);
+      }
+
+      return result;
+    };
+
+    mvAudio.Decode[0] = function(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      this: any,
+      channelData: Float32Array,
+      wSamples: number,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      byteStream: any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ): any {
+      return decodeInterceptor(this, channelData, wSamples, byteStream, originalDecode0, 'Decode0');
+    };
+
+    mvAudio.Decode[1] = function(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      this: any,
+      channelData: Float32Array,
+      wSamples: number,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      byteStream: any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ): any {
+      return decodeInterceptor(this, channelData, wSamples, byteStream, originalDecode1, 'Decode1');
+    };
+  }
+
+  /**
+   * Write interleaved audio data directly to the frame capture buffer.
+   * The channelData from MVRP's decode is already in interleaved format
+   * (L0, R0, L1, R1, …), so no further interleaving is needed.
+   *
+   * @param channelData  Pre-interleaved Float32Array from the MVRP decoder.
+   */
+  private writeDecodedSamplesToCapture(channelData: Float32Array): void {
+    if (!this.decodeFrameCapture) return;
+
+    console.log('[writeDecodedSamples] channelData[0:20]:', Array.from(channelData.slice(0, 20)));
+
+    // Write directly – no interleaving needed, data is already in correct format.
+    this.decodeFrameCapture.buffer.write(channelData);
+    console.log('[writeDecodedSamples] Wrote', channelData.length, 'samples to capture');
   }
 
   /**

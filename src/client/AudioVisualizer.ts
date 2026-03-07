@@ -1,4 +1,5 @@
 import type { ProximityAudioManager } from '../audio/ProximityAudioManager.js';
+import { AudioFrameCapture } from '../audio/AudioFrameCapture.js';
 
 /** Options for configuring the AudioVisualizer. */
 export interface VisualizerOptions {
@@ -11,8 +12,14 @@ export interface VisualizerOptions {
 }
 
 /**
- * AudioVisualizer – renders real-time dual-channel (L/R) amplitude meters on
- * an HTML5 canvas element placed inside the supplied container.
+ * AudioVisualizer – renders a real-time dual-channel (L/R) looping time-series
+ * waveform on an HTML5 canvas element placed inside the supplied container.
+ *
+ * The canvas is 280 × 240 px: the top 120 px show the left-channel waveform
+ * (cyan) and the bottom 120 px show the right-channel waveform (magenta).
+ * Each horizontal pixel corresponds to one amplitude sample stored in a
+ * 280-sample circular buffer, producing a continuously scrolling display
+ * similar to an oscilloscope or Audacity waveform view.
  *
  * Lifecycle
  * ─────────
@@ -21,9 +28,12 @@ export interface VisualizerOptions {
  *   …avatar is active…
  *   vis.dispose();                                  // stops loop, removes canvas
  *
- * Audio levels are read directly from MVRP's internal `m_Output.asLevel` array
- * each animation frame.  When no audio source is attached, `update()` can be
- * called directly with normalised L/R amplitude values for testing.
+ * Audio levels are sampled each animation frame by reading PCM data from an
+ * {@link AudioFrameCapture} that taps the MVRP audio stream.  The first
+ * {@link FRAME_SKIP_THRESHOLD} frames are discarded to allow the capture buffer
+ * to fill with real audio before samples are fed to `updateFromPcm()`.
+ * When no audio source is attached, `update()` can be called directly with
+ * normalised L/R amplitude values for testing.
  */
 export class AudioVisualizer {
   private readonly container: HTMLElement;
@@ -34,14 +44,36 @@ export class AudioVisualizer {
   // MVRP audio manager reference (set in attachAudioSource)
   private audioManager: ProximityAudioManager | null = null;
 
+  // AudioFrameCapture tap used to read decoded PCM from the MVRP stream
+  private audioCapture: AudioFrameCapture | null = null;
+  // Scratch buffer for reading PCM samples from the audioCapture ring buffer
+  private readonly readBuffer: Float32Array = new Float32Array(960);
+
+  // Frame skip counter – discard the first N frames to let the buffer fill
+  private frameSkipCounter: number = 0;
+  private readonly FRAME_SKIP_THRESHOLD: number = 5; // Skip first 5 frames
+
   // Current L/R amplitude levels (0–1) read from MVRP or set via update()
   private levelL: number = 0;
   private levelR: number = 0;
 
+  // Frame counter used for periodic diagnostic logging in drawFrame()
+  private frameCount: number = 0;
+
   // requestAnimationFrame handle
   private animFrameId: number | null = null;
 
-  // ─── Constructor ────────────────────────────────────────────────────────────
+  // ─── Rolling sample buffers ──────────────────────────────────────────────────
+
+  // Number of samples kept (one per canvas pixel width)
+  private static readonly BUFFER_SIZE = 280;
+
+  // Circular buffers for L/R channel amplitude samples (values in 0–1)
+  private readonly sampleBufferL: Float32Array = new Float32Array(AudioVisualizer.BUFFER_SIZE);
+  private readonly sampleBufferR: Float32Array = new Float32Array(AudioVisualizer.BUFFER_SIZE);
+
+  // Write cursor; the oldest sample lives at this index
+  private bufferIndex: number = 0;
 
   constructor(container: HTMLElement, options?: VisualizerOptions) {
     this.container = container;
@@ -73,11 +105,13 @@ export class AudioVisualizer {
   /**
    * Wire the visualizer into the live audio stream managed by `audioManager`.
    *
-   * Reads audio levels directly from MVRP's `m_Output.asLevel` array each
-   * animation frame, which contains the actual decoded audio amplitude data
-   * at the output stage.  No Web Audio nodes are created or connected.
-   * Starts the requestAnimationFrame draw loop automatically.
+   * Creates an {@link AudioFrameCapture} and enables it to tap the MVRP audio
+   * stream, buffering decoded PCM samples for each animation frame.
+   * The frame skip counter discards the first {@link FRAME_SKIP_THRESHOLD}
+   * frames to allow the capture buffer to fill with real audio data before
+   * feeding samples to `updateFromPcm()`.
    *
+   * Starts the requestAnimationFrame draw loop automatically.
    * Idempotent: subsequent calls have no effect while a source is already
    * attached.
    */
@@ -86,24 +120,60 @@ export class AudioVisualizer {
 
     const proximity = audioManager.getProximity();
     if (!proximity) {
-      console.warn('[AudioVisualizer] Proximity not ready; call after ProximityAudioManager.start()');
+      console.warn('[AudioVisualizer] Proximity not ready');
       return;
     }
 
     this.audioManager = audioManager;
+
+    // Create and enable an AudioFrameCapture tap into the MVRP audio stream
+    this.audioCapture = new AudioFrameCapture(audioManager);
+    this.audioCapture.enable();
+
+    // Wire the capture into MVRP's decode stage to get raw PCM data
+    audioManager.registerDecodeCapture(this.audioCapture);
+
+    console.log('[AudioVisualizer] Capture attached to decode interceptor');
+
     this.startLoop();
     console.log('[AudioVisualizer] Attached to audio source; visualizer active');
   }
 
   /**
+   * Detach from the current audio source, stop the animation loop, and release
+   * the AudioFrameCapture.  The canvas remains in the DOM.
+   * Idempotent: calling when no source is attached has no effect.
+   */
+  detachAudioSource(): void {
+    if (this.audioManager) {
+      this.audioManager.unregisterDecodeCapture();
+      console.log('[AudioVisualizer] Capture detached from decode interceptor');
+    }
+
+    if (this.audioCapture) {
+      this.audioCapture.disable();
+      this.audioCapture.dispose();
+      this.audioCapture = null;
+    }
+
+    if (this.animFrameId !== null) {
+      cancelAnimationFrame(this.animFrameId);
+      this.animFrameId = null;
+    }
+
+    this.audioManager = null;
+  }
+
+  /**
    * Push normalised L/R amplitude values directly into the visualizer.
    *
+   * Appends one sample to the circular buffers and redraws.
    * Useful for testing.  Values should be in the range 0–1.
-   * Redraws immediately so callers can drive the refresh rate externally.
    */
   update(levelL: number, levelR: number): void {
     this.levelL = Math.max(0, Math.min(1, levelL));
     this.levelR = Math.max(0, Math.min(1, levelR));
+    this.pushSample(this.levelL, this.levelR);
     this.drawFrame();
   }
 
@@ -114,10 +184,8 @@ export class AudioVisualizer {
    * amplitude bars accordingly.  The animation loop is started automatically
    * if it is not already running.
    *
-   * This method provides a direct PCM path that runs in parallel with the
-   * existing `attachAudioSource` / AnalyserNode path and is the preferred
-   * route for feeding speech-to-text pipelines that already hold a decoded
-   * PCM slice.
+   * This method provides a direct PCM path and is the preferred route for
+   * feeding speech-to-text pipelines that already hold a decoded PCM slice.
    *
    * @param samples       Interleaved PCM samples (numeric array-like).
    * @param channelCount  Channels interleaved in `samples`.  Default: 2.
@@ -155,6 +223,7 @@ export class AudioVisualizer {
 
     // Ensure the animation loop is running even when no audio source has been
     // attached via attachAudioSource().
+    this.pushSample(this.levelL, this.levelR);
     if (this.animFrameId === null) {
       this.startLoop();
     } else {
@@ -168,6 +237,17 @@ export class AudioVisualizer {
    */
   dispose(): void {
     this.stopLoop();
+    this.frameSkipCounter = 0;
+
+    if (this.audioCapture) {
+      if (this.audioManager) {
+        this.audioManager.unregisterDecodeCapture();
+      }
+      this.audioCapture.disable();
+      this.audioCapture.dispose();
+      this.audioCapture = null;
+    }
+
     this.audioManager = null;
 
     if (this.canvas.parentNode) {
@@ -181,22 +261,29 @@ export class AudioVisualizer {
 
   private startLoop(): void {
     if (this.animFrameId !== null) return;
+
+    this.frameSkipCounter = 0; // Reset counter
+
     const tick = () => {
       this.animFrameId = requestAnimationFrame(tick);
-      // Read audio levels directly from MVRP's output stage
-      const proximity = this.audioManager?.getProximity();
-      if (proximity) {
-        const mvrpAudio = proximity.GetAudio();
-        const asLevel = mvrpAudio?.m_Output?.asLevel;
-        if (asLevel) {
-          // asLevel contains signed int16 amplitudes; 32768 is the max positive
-          // value for a signed 16-bit integer, so dividing normalises to 0–1.
-          this.levelL = this.normalizeLevel(asLevel[0] ?? 0);
-          this.levelR = this.normalizeLevel(asLevel[1] ?? 0);
+
+      if (this.audioCapture) {
+        // Skip first N frames to allow buffer to fill with real data
+        if (this.frameSkipCounter < this.FRAME_SKIP_THRESHOLD) {
+          this.frameSkipCounter++;
+          // Still consume from buffer to advance pointers
+          this.audioCapture.buffer.read(this.readBuffer);
+        } else {
+          const n = this.audioCapture.buffer.read(this.readBuffer);
+          if (n > 0) {
+            this.updateFromPcm(this.readBuffer.subarray(0, n), 2, false);
+          }
         }
       }
+
       this.drawFrame();
     };
+
     this.animFrameId = requestAnimationFrame(tick);
   }
 
@@ -210,65 +297,73 @@ export class AudioVisualizer {
   // ─── Rendering ──────────────────────────────────────────────────────────────
 
   /**
-   * Normalise a signed int16 amplitude value to the range 0–1.
-   *
-   * @param value  Raw signed int16 amplitude from `m_Output.asLevel`.
+   * Write the current L/R levels into the circular sample buffers and advance
+   * the write cursor, overwriting the oldest sample when the buffer is full.
    */
-  private normalizeLevel(value: number): number {
-    return Math.min(Math.abs(value) / 0.1, 1);
+  private pushSample(l: number, r: number): void {
+    this.sampleBufferL[this.bufferIndex] = l;
+    this.sampleBufferR[this.bufferIndex] = r;
+    this.bufferIndex = (this.bufferIndex + 1) % AudioVisualizer.BUFFER_SIZE;
   }
 
   private drawFrame(): void {
+    this.frameCount++;
+
     const { width, height } = this.canvas;
     const c = this.ctx2d;
+    const halfH = height / 2;
+
+    // Diagnostic logging: once per second (≈60 frames) when capture is active
+    if (this.audioCapture?.isEnabled) {
+      const info = this.audioCapture.buffer.info;
+      if (info.available > 0 && this.frameCount % 60 === 0) {
+        const out = new Float32Array(100);
+        const read = this.audioCapture.buffer.read(out);
+        console.log('[drawFrame] Available:', info.available, 'Read:', read, 'Samples:', Array.from(out.slice(0, 10)));
+      }
+    }
 
     // Background
     c.fillStyle = this.opts.backgroundColor;
     c.fillRect(0, 0, width, height);
 
-    // Two equal-width bars with padding on the sides and a gap between
-    const padX = Math.round(width * 0.1);
-    const gap = Math.round(width * 0.08);
-    const barW = Math.round((width - padX * 2 - gap) / 2);
-    const padY = Math.round(height * 0.05);
-    const barAreaH = height - padY * 2;
-
-    this.drawAmplitudeBar(this.levelL, padX, padY, barW, barAreaH, this.opts.colorLeft);
-    this.drawAmplitudeBar(this.levelR, padX + barW + gap, padY, barW, barAreaH, this.opts.colorRight);
+    // Left channel (top half) and right channel (bottom half)
+    this.drawWaveform(this.sampleBufferL, 0, halfH, this.opts.colorLeft);
+    this.drawWaveform(this.sampleBufferR, halfH, halfH, this.opts.colorRight);
   }
 
   /**
-   * Render a single vertical amplitude bar.
+   * Render one channel's circular sample buffer as a looping time-series
+   * waveform.  For each x-pixel the amplitude is drawn as a vertical line
+   * centred in `areaH`, so silence produces a thin centre line and full
+   * amplitude spans the entire half-canvas.
    *
-   * @param amplitude  Normalised amplitude in the range 0–1.
-   * @param x          Left edge of the bar (canvas-space).
-   * @param y          Top edge of the bar area (canvas-space).
-   * @param barW       Width of the bar in pixels.
-   * @param barAreaH   Total height of the bar area in pixels.
-   * @param color      Fill colour for the bar.
+   * @param buffer  Circular buffer of amplitude samples (0–1).
+   * @param yTop    Top edge of the channel's drawing area (canvas-space).
+   * @param areaH   Height of the channel's drawing area in pixels.
+   * @param color   Stroke colour.
    */
-  private drawAmplitudeBar(
-    amplitude: number,
-    x: number,
-    y: number,
-    barW: number,
-    barAreaH: number,
-    color: string,
-  ): void {
+  private drawWaveform(buffer: Float32Array, yTop: number, areaH: number, color: string): void {
     const c = this.ctx2d;
+    const n = AudioVisualizer.BUFFER_SIZE;
+    const centerY = yTop + areaH / 2;
+    const halfAreaH = areaH / 2;
 
-    // Dim background track
-    c.fillStyle = 'rgba(255,255,255,0.05)';
-    c.fillRect(x, y, barW, barAreaH);
+    c.strokeStyle = color;
+    c.lineWidth = 1;
 
-    const fillH = Math.round(Math.min(amplitude, 1) * barAreaH);
-    if (fillH > 0) {
-      // Gradient from base colour at the bottom to near-white at the top
-      const grad = c.createLinearGradient(0, y + barAreaH, 0, y);
-      grad.addColorStop(0, color);
-      grad.addColorStop(1, 'rgba(255,255,255,0.85)');
-      c.fillStyle = grad;
-      c.fillRect(x, y + barAreaH - fillH, barW, fillH);
+    // Build all line segments in a single path to minimise draw calls.
+    c.beginPath();
+    for (let x = 0; x < n; x++) {
+      // bufferIndex is the oldest sample; walk forward from there so the
+      // waveform scrolls left-to-right with the most recent sample on the right.
+      const sampleIdx = (this.bufferIndex + x) % n;
+      const amp = buffer[sampleIdx] ?? 0;
+      const lineH = amp * halfAreaH;
+
+      c.moveTo(x, centerY - lineH);
+      c.lineTo(x, centerY + lineH);
     }
+    c.stroke();
   }
 }
