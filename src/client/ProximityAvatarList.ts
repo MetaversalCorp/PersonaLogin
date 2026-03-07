@@ -11,6 +11,7 @@ export interface AvatarInfo {
 /**
  * Tracks nearby external avatars by intercepting Proximity's onAvatarUpdate
  * event which provides batch avatar updates with position data.
+ * Maintains a sorted list of the 10 closest avatars and notifies observers of changes.
  */
 export class ProximityAvatarList {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -243,9 +244,9 @@ export class ProximityAvatarList {
   }
 
   /**
-   * Get the 5 closest avatars, sorted by distance.
+   * Get the 10 closest avatars, sorted by distance.
    */
-  getClosestAvatars(count: number = 5): AvatarInfo[] {
+  getClosestAvatars(count: number = 10): AvatarInfo[] {
     return Array.from(this.avatars.values())
       .sort((a, b) => a.distance - b.distance)
       .slice(0, count);
@@ -269,7 +270,7 @@ export class ProximityAvatarList {
    * Notify all observers of avatar list changes.
    */
   private notifyObservers(): void {
-    const closestAvatars = this.getClosestAvatars(5);
+    const closestAvatars = this.getClosestAvatars(10);
     for (const observer of this.observers) {
       observer(closestAvatars);
     }
