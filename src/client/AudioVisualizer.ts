@@ -1,7 +1,7 @@
 import type { ProximityAudioManager } from '../audio/ProximityAudioManager.js';
 import { AudioFrameCapture } from '../audio/AudioFrameCapture.js';
-import { ProximityAvatarListener } from './ProximityAvatarListener.js';
-import type { AvatarInfo } from './ProximityAvatarListener.js';
+import { ProximityAvatarList } from './ProximityAvatarList.js';
+import type { AvatarInfo } from './ProximityAvatarList.js';
 
 /** Options for configuring the AudioVisualizer. */
 export interface VisualizerOptions {
@@ -49,8 +49,8 @@ export class AudioVisualizer {
   // AudioFrameCapture tap used to read decoded PCM from the MVRP stream
   private audioCapture: AudioFrameCapture | null = null;
 
-  // ProximityAvatarListener tracks nearby avatars and updates the proximity panel
-  private proximityList: ProximityAvatarListener | null = null;
+  // ProximityAvatarList tracks nearby avatars and updates the proximity panel
+  private proximityList: ProximityAvatarList | null = null;
   private proximityPanel: HTMLElement | null = null;
   // Scratch buffer for reading PCM samples from the audioCapture ring buffer
   private readonly readBuffer: Float32Array = new Float32Array(960);
@@ -141,13 +141,13 @@ export class AudioVisualizer {
 
     console.log('[AudioVisualizer] Capture attached to decode interceptor');
 
-    // Initialize proximity avatar listener and attach to Proximity
-    this.proximityList = new ProximityAvatarListener();
-    this.proximityList.init(audioManager);
+    // Initialize proximity avatar list and attach to Proximity
+    this.proximityList = new ProximityAvatarList();
+    this.proximityList.init(proximity);  // Pass Proximity instance directly
     this.proximityList.addObserver((avatars: AvatarInfo[]) => this.updateProximityPanel(avatars));
 
     this.proximityPanel = document.getElementById('proximity-panel');
-    console.log('[AudioVisualizer] Proximity avatar listener initialized');
+    console.log('[AudioVisualizer] Proximity listener attached');
 
     this.startLoop();
     console.log('[AudioVisualizer] Attached to audio source; visualizer active');
