@@ -26,19 +26,28 @@ export interface AudioFrameCaptureOptions {
 const DEFAULT_BUFFER_DURATION_SECONDS = 4;
 
 /**
- * AudioFrameCapture – taps the live audio stream at {@link AudioContext.destination}
- * and buffers the decoded PCM samples in an {@link AudioFrameBuffer} ring
- * buffer for consumption by speech-to-text or other audio processing pipelines.
+ * AudioFrameCapture – buffers decoded PCM samples in an {@link AudioFrameBuffer}
+ * ring buffer for consumption by speech-to-text or other audio processing
+ * pipelines.
  *
- * MVRP routes spatial audio through the Web Audio API graph internally.  Since
- * its internal nodes and buffers are not directly accessible, a
- * {@link ScriptProcessorNode} is inserted into the audio processing pipeline to
- * intercept audio flowing to the speakers.  The node passes audio through
+ * **Primary path – decode interception (preferred)**
+ * {@link ProximityAudioManager.registerDecodeCapture} wires this instance into
+ * MVRP's decode stage.  When a frame is decoded, the raw stereo PCM samples are
+ * interleaved and written directly to {@link buffer} via
+ * {@link AudioFrameBuffer.write}.  This path bypasses the Web Audio API graph
+ * entirely, so it works even when MVRP routes audio through a native/WASM path
+ * that would otherwise silence ScriptProcessorNode taps.
+ *
+ * **Legacy path – ScriptProcessorNode tap**
+ * A {@link ScriptProcessorNode} is inserted into the audio processing pipeline
+ * to intercept audio flowing to the speakers.  The node passes audio through
  * unmodified so playback is unaffected, and its `onaudioprocess` callback
  * interleaves the stereo channels and writes them to the ring buffer.
+ * Enable this path by calling {@link enable} and then wiring the node in via
+ * {@link ProximityAudioManager.connectAudioCapture}.
  *
  * Capture does **not** affect the existing MVRP → AudioContext.destination
- * playback chain; the ScriptProcessorNode transparently forwards all audio.
+ * playback chain.
  *
  * Lifecycle
  * ─────────

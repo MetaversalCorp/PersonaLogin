@@ -127,11 +127,35 @@ export class AudioVisualizer {
     this.audioCapture = new AudioFrameCapture(audioManager);
     this.audioCapture.enable();
 
-    // Connect the capture to the audio stream via the player's gain node
-    audioManager.connectAudioCapture(this.audioCapture);
+    // Wire the capture into MVRP's decode stage to get raw PCM data
+    audioManager.registerDecodeCapture(this.audioCapture);
 
     this.startLoop();
     console.log('[AudioVisualizer] Attached to audio source; visualizer active');
+  }
+
+  /**
+   * Detach from the current audio source, stop the animation loop, and release
+   * the AudioFrameCapture.  The canvas remains in the DOM.
+   * Idempotent: calling when no source is attached has no effect.
+   */
+  detachAudioSource(): void {
+    if (this.audioManager) {
+      this.audioManager.unregisterDecodeCapture();
+    }
+
+    if (this.audioCapture) {
+      this.audioCapture.disable();
+      this.audioCapture.dispose();
+      this.audioCapture = null;
+    }
+
+    if (this.animFrameId !== null) {
+      cancelAnimationFrame(this.animFrameId);
+      this.animFrameId = null;
+    }
+
+    this.audioManager = null;
   }
 
   /**
@@ -211,7 +235,7 @@ export class AudioVisualizer {
 
     if (this.audioCapture) {
       if (this.audioManager) {
-        this.audioManager.disconnectAudioCapture(this.audioCapture);
+        this.audioManager.unregisterDecodeCapture();
       }
       this.audioCapture.disable();
       this.audioCapture.dispose();
