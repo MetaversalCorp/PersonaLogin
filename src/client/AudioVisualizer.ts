@@ -184,11 +184,16 @@ export class AudioVisualizer {
   }
 
   /**
-   * Call this when local avatar position updates to keep distance calculations accurate.
-   * Position is now tracked automatically via the onUserReady Proximity callback.
+   * Update the local avatar's persona ID and position in the proximity list.
+   * Called from InWorldSession.teleportTo() to keep distance calculations accurate.
+   *
+   * @param personaID The local persona's numeric ID
+   * @param position The Cartesian position {x, y, z} in global coordinates
    */
-  updateLocalPosition(_x: number, _y: number, _z: number): void {
-    // Position is updated via Proximity's onUserReady callback in ProximityAvatarList
+  updateProximityListPosition(personaID: number, position: { x: number; y: number; z: number }): void {
+    if (this.proximityList) {
+      this.proximityList.updateLocalPosition(personaID, position);
+    }
   }
 
   /**

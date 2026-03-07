@@ -118,6 +118,13 @@ export class InWorldSession extends Session {
       return;
     }
 
+    // Sync ProximityAvatarList with the new local position
+    if (this.visualizer) {
+      const personaId = this.personaSession.personaId;
+      this.visualizer.updateProximityListPosition(Number(personaId), position);
+      console.log('[InWorldSession] Updated ProximityAvatarList with teleport position');
+    }
+
     ///console.debug(`[InWorldSession] Sending UPDATE to reposition to ${celestialId}:`, position);
 
     try {
