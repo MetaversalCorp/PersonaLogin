@@ -30,15 +30,15 @@ const DEFAULT_BUFFER_DURATION_SECONDS = 4;
  * and buffers the decoded PCM samples in an {@link AudioFrameBuffer} ring
  * buffer for consumption by speech-to-text or other audio processing pipelines.
  *
- * Instead of polling MVRP's internal `m_Buffer` (which is not populated during
- * normal Web Audio API playback), an {@link AnalyserNode} is connected directly
- * to `AudioContext.destination` where MVRP outputs decoded audio.  Each
- * `requestAnimationFrame` tick reads the most-recently-decoded samples via
- * `getFloatTimeDomainData()` and appends only the samples that have elapsed
- * since the previous poll to avoid duplication.
+ * MVRP routes spatial audio through the Web Audio API graph internally.  Since
+ * its internal nodes and buffers are not directly accessible, a
+ * {@link ScriptProcessorNode} is inserted into the audio processing pipeline to
+ * intercept audio flowing to the speakers.  The node passes audio through
+ * unmodified so playback is unaffected, and its `onaudioprocess` callback
+ * interleaves the stereo channels and writes them to the ring buffer.
  *
  * Capture does **not** affect the existing MVRP → AudioContext.destination
- * playback chain; the AnalyserNode is a parallel, read-only tap.
+ * playback chain; the ScriptProcessorNode transparently forwards all audio.
  *
  * Lifecycle
  * ─────────
@@ -58,17 +58,15 @@ export class AudioFrameCapture {
   private _enabled: boolean = false;
   private pollHandle: ReturnType<typeof requestAnimationFrame> | null = null;
 
-  /** AnalyserNode connected as a second listener to AudioContext.destination to passively monitor MVRP output. */
-  private analyserNode: AnalyserNode | null = null;
-  /** Scratch buffer for `getFloatTimeDomainData` – sized to `analyserNode.fftSize`. */
-  private analyserBuffer: Float32Array | null = null;
-  /** AudioContext.currentTime at the last successful capture, or -1 if not yet started. */
-  private lastCaptureTime: number = -1;
+  /** ScriptProcessorNode used to intercept audio flowing to the speakers and write it to the frame buffer. */
+  private scriptProcessorNode: ScriptProcessorNode | null = null;
+  /** Pre-allocated interleaved scratch buffer sized to the ScriptProcessorNode's buffer size × channel count. */
+  private interleavedBuffer: Float32Array | null = null;
 
   /**
    * @param audioManager  The active ProximityAudioManager whose
-   *                      {@link AudioContext} destination will be tapped via an
-   *                      AnalyserNode for decoded audio frames.
+   *                      {@link AudioContext} destination will be tapped via a
+   *                      ScriptProcessorNode for decoded audio frames.
    * @param options       Optional buffer / stream configuration.
    */
   constructor(audioManager: ProximityAudioManager, options?: AudioFrameCaptureOptions) {
@@ -86,10 +84,9 @@ export class AudioFrameCapture {
    * Start capturing decoded audio frames.
    * Idempotent: calling while already enabled has no effect.
    *
-   * Connects an AnalyserNode as a second listener to AudioContext.destination
-   * to passively monitor the spatial audio output from MVRP (which is mixed
-   * based on avatar positions). The AnalyserNode does not interfere with
-   * playback—it simply reads the audio flowing to the speakers.
+   * Creates a ScriptProcessorNode to intercept audio flowing to the speakers
+   * and capture the actual spatial audio output from MVRP.  The node passes
+   * audio through unmodified so playback is unaffected.
    */
   enable(): void {
     if (this._enabled) return;
@@ -97,20 +94,44 @@ export class AudioFrameCapture {
     const ctx: AudioContext | null = this.audioManager.getAudioContext();
 
     if (ctx) {
-      this.analyserNode = ctx.createAnalyser();
-      // fftSize must be a power of two; 2048 gives ~42 ms of history at 48 kHz,
-      // comfortably covering one rAF interval (~16 ms at 60 fps).
-      this.analyserNode.fftSize = 2048;
-      this.analyserBuffer = new Float32Array(this.analyserNode.fftSize);
+      // Create ScriptProcessorNode to intercept audio flowing to speakers.
+      // Use 4096 buffer size for reasonable balance between latency and processing.
+      this.scriptProcessorNode = ctx.createScriptProcessor(4096, 2, 2);
+      // Pre-allocate the interleaved scratch buffer to avoid per-callback allocations.
+      this.interleavedBuffer = new Float32Array(4096 * 2);
 
-      // Connect as second listener to destination (passive monitoring)
-      this.analyserNode.connect(ctx.destination);
+      this.scriptProcessorNode.onaudioprocess = (event: AudioProcessingEvent) => {
+        // Read the input buffer (audio received from connected source nodes)
+        const inputData = event.inputBuffer;
+        const channelCount = inputData.numberOfChannels;
+        const sampleCount = inputData.length;
+
+        // Interleave channels and write to frame buffer
+        if (channelCount === 2 && this.interleavedBuffer) {
+          const leftData = inputData.getChannelData(0);
+          const rightData = inputData.getChannelData(1);
+
+          for (let i = 0; i < sampleCount; i++) {
+            this.interleavedBuffer[i * 2] = leftData[i];
+            this.interleavedBuffer[i * 2 + 1] = rightData[i];
+          }
+
+          this.frameBuffer.write(this.interleavedBuffer, 0, sampleCount * 2);
+        }
+
+        // Pass through to destination (don't break playback)
+        for (let ch = 0; ch < channelCount; ch++) {
+          event.outputBuffer.getChannelData(ch).set(event.inputBuffer.getChannelData(ch));
+        }
+      };
+
+      // Connect to destination so it processes audio flowing through
+      this.scriptProcessorNode.connect(ctx.destination);
     }
 
     this._enabled = true;
-    this.lastCaptureTime = -1;
     this.schedulePoll();
-    console.log('[AudioFrameCapture] Capture enabled');
+    console.log('[AudioFrameCapture] Capture enabled with ScriptProcessorNode');
   }
 
   /**
@@ -127,11 +148,10 @@ export class AudioFrameCapture {
       this.pollHandle = null;
     }
 
-    if (this.analyserNode) {
-      // Disconnect from destination
-      this.analyserNode.disconnect();
-      this.analyserNode = null;
-      this.analyserBuffer = null;
+    if (this.scriptProcessorNode) {
+      this.scriptProcessorNode.disconnect();
+      this.scriptProcessorNode = null;
+      this.interleavedBuffer = null;
     }
 
     console.log('[AudioFrameCapture] Capture disabled');
@@ -192,43 +212,11 @@ export class AudioFrameCapture {
   }
 
   /**
-   * Read fresh time-domain samples from the AnalyserNode and append them to
-   * the ring buffer.
-   *
-   * To avoid duplicating samples across consecutive rAF ticks, only the
-   * portion of the AnalyserNode's window that is newer than the previous poll
-   * (computed via `AudioContext.currentTime`) is written.  On the first tick
-   * after enable() the baseline time is recorded and no samples are written,
-   * ensuring the ring buffer always contains non-overlapping audio.
+   * No-op: the ScriptProcessorNode's `onaudioprocess` callback handles all
+   * capturing directly in the audio processing pipeline.  This method exists
+   * only to keep the poll loop intact for consistency.
    */
   private captureFrame(): void {
-    if (!this.analyserNode || !this.analyserBuffer) return;
-
-    const ctx: AudioContext | null = this.audioManager.getAudioContext();
-    if (!ctx) return;
-
-    const now = ctx.currentTime;
-
-    // First tick: record baseline and skip writing so we always start with
-    // a clean, non-overlapping window on the next tick.
-    if (this.lastCaptureTime < 0) {
-      this.lastCaptureTime = now;
-      return;
-    }
-
-    const elapsed = now - this.lastCaptureTime;
-    const newSamples = Math.floor(elapsed * this.frameBuffer.sampleRate);
-    if (newSamples <= 0) return;
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    this.analyserNode.getFloatTimeDomainData(this.analyserBuffer as any);
-
-    // The AnalyserNode provides the most-recent `fftSize` samples.
-    // Take only the freshest `newSamples` from the tail of that window.
-    const bufLen = this.analyserBuffer.length;
-    const startIdx = Math.max(0, bufLen - newSamples);
-    this.frameBuffer.write(this.analyserBuffer, startIdx, bufLen - startIdx);
-
-    this.lastCaptureTime = now;
+    // ScriptProcessorNode's onaudioprocess handles all the capturing now.
   }
 }
