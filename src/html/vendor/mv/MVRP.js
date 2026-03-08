@@ -2272,6 +2272,11 @@ MV.MVRP.Proximity = class extends MV.MVMF.NOTIFICATION
                                                    }
                                                 }
                                              }
+
+                                             if (dwSize == 0)
+                                             {
+                                                bSuccess = true;
+                                             }
                                           }
                                        }
                                     }
