@@ -131,14 +131,13 @@ export class ProximityAvatarList {
   /**
    * Handle onAvatarUpdate event with batch avatar data.
    * The event contains:
-   * - aSBA_RProximity_Avatar_Open_Ex: Array of objects with dwRPersonaIx and optional Name
-   * - SBA_RProximity_Avatar_Update_Ex: Avatar state with position data
+   * - aSBA_RProximity_Avatar_Open_Ex: Array of persona IDs
+   * - SBA_RProximity_Avatar_Update_Ex: Avatar state with position data and optional Name
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private handleAvatarUpdate(eventData: any): void {
     if (!eventData) return;
 
-    const avatarOpenExArray = eventData.aSBA_RProximity_Avatar_Open_Ex;
     const avatarUpdateEx = eventData.SBA_RProximity_Avatar_Update_Ex;
 
     if (!avatarUpdateEx) {
@@ -179,20 +178,18 @@ export class ProximityAvatarList {
     // Determine if this is a new avatar (first appearance)
     const isNew = !this.avatars.has(dwRPersonaIx);
 
-    // Get name from avatarOpenExArray if available, and cache it
-    let name = this.avatarNames.get(dwRPersonaIx) || 'Unknown';
-    if (avatarOpenExArray && Array.isArray(avatarOpenExArray)) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const avatarOpenEx = avatarOpenExArray.find((a: any) => a.twRPersonaIx === dwRPersonaIx);
-      if (avatarOpenEx && avatarOpenEx.Name) {
-        const forename = avatarOpenEx.Name.wszForename || '';
-        const surname = avatarOpenEx.Name.wszSurname || '';
-        const resolved = (forename + ' ' + surname).trim();
-        if (resolved) {
-          name = resolved;
-          this.avatarNames.set(dwRPersonaIx, name);
-        }
+    // Extract name from avatarUpdateEx.Name if available (from updated MVRP.js parser)
+    let name = 'Unknown';
+    if (avatarUpdateEx.Name) {
+      const forename = avatarUpdateEx.Name.wszForename || '';
+      const surname = avatarUpdateEx.Name.wszSurname || '';
+      const fullName = (forename + ' ' + surname).trim();
+      if (fullName) {
+        name = fullName;
+        this.avatarNames.set(dwRPersonaIx, name);
       }
+    } else if (this.avatarNames.has(dwRPersonaIx)) {
+      name = this.avatarNames.get(dwRPersonaIx) || 'Unknown';
     }
 
     this.avatars.set(dwRPersonaIx, {
