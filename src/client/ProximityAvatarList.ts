@@ -131,13 +131,14 @@ export class ProximityAvatarList {
   /**
    * Handle onAvatarUpdate event with batch avatar data.
    * The event contains:
-   * - aSBA_RProximity_Avatar_Open_Ex: Array of persona IDs
-   * - SBA_RProximity_Avatar_Update_Ex: Avatar state with position data and optional Name
+   * - aSBA_RProximity_Avatar_Open_Ex: Array of avatar metadata (dwRPersonaIx, Name, etc.)
+   * - SBA_RProximity_Avatar_Update_Ex: Avatar state with position data
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private handleAvatarUpdate(eventData: any): void {
     if (!eventData) return;
 
+    const avatarOpenExArray = eventData.aSBA_RProximity_Avatar_Open_Ex;
     const avatarUpdateEx = eventData.SBA_RProximity_Avatar_Update_Ex;
 
     if (!avatarUpdateEx) {
@@ -178,17 +179,23 @@ export class ProximityAvatarList {
     // Determine if this is a new avatar (first appearance)
     const isNew = !this.avatars.has(dwRPersonaIx);
 
-    // Extract name from avatarUpdateEx.Name if available (from updated MVRP.js parser)
+    // Extract name from aSBA_RProximity_Avatar_Open_Ex by matching persona ID
     let name = 'Unknown';
-    if (avatarUpdateEx.Name) {
-      const forename = avatarUpdateEx.Name.wszForename || '';
-      const surname = avatarUpdateEx.Name.wszSurname || '';
-      const fullName = (forename + ' ' + surname).trim();
-      if (fullName) {
-        name = fullName;
-        this.avatarNames.set(dwRPersonaIx, name);
+    if (avatarOpenExArray && Array.isArray(avatarOpenExArray)) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const avatarOpenEx = avatarOpenExArray.find((a: any) => a.dwRPersonaIx === dwRPersonaIx);
+      if (avatarOpenEx && avatarOpenEx.Name) {
+        const forename = avatarOpenEx.Name.wszForename || '';
+        const surname = avatarOpenEx.Name.wszSurname || '';
+        const fullName = (forename + ' ' + surname).trim();
+        if (fullName) {
+          name = fullName;
+          this.avatarNames.set(dwRPersonaIx, name);
+        }
       }
-    } else if (this.avatarNames.has(dwRPersonaIx)) {
+    }
+    // Use cached name for updates without Name data
+    if (name === 'Unknown' && this.avatarNames.has(dwRPersonaIx)) {
       name = this.avatarNames.get(dwRPersonaIx) || 'Unknown';
     }
 

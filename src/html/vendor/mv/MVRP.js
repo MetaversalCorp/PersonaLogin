@@ -2137,7 +2137,7 @@ MV.MVRP.Proximity = class extends MV.MVMF.NOTIFICATION
                               wSize  = ByteStream.Read_WORD ();
                               wCount = ByteStream.Read_WORD ();
 
-                              if (dwSize >= wSize  &&  wCount * 116 == wSize)  // 116 = 8+4+38+38+4+2+18+2+2 bytes per entry
+                              if (dwSize >= wSize  &&  wCount * 112 == wSize)  // 112 = 4+4+38+38+4+2+18+2+2 bytes per entry
                               {
                                  dwSize -= wSize;
 
@@ -2147,7 +2147,7 @@ MV.MVRP.Proximity = class extends MV.MVMF.NOTIFICATION
                                  {
                                     aSBA_RProximity_Avatar_Open_Ex[w] =
                                     {
-                                       twRPersonaIx : ByteStream.Read_TWORD8 (),
+                                       dwRPersonaIx : ByteStream.Read_DWORD (),
                                        dwReserved   : ByteStream.Read_DWORD (),
                                        Name         :
                                        {
