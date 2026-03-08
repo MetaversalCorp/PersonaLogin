@@ -2228,7 +2228,7 @@ MV.MVRP.Proximity = class extends MV.MVMF.NOTIFICATION
                                           wSize  = ByteStream.Read_WORD ();
                                           wCount = ByteStream.Read_WORD ();
 
-                                          if (dwSize >= wSize  &&  wCount * 8 == wSize)
+                                          if (dwSize >= wSize  &&  wCount * 4 == wSize)
                                           {
                                              dwSize -= wSize;
 
@@ -2236,7 +2236,7 @@ MV.MVRP.Proximity = class extends MV.MVMF.NOTIFICATION
                                              {
                                                 const SBA_RProximity_Avatar_Hide =
                                                 {
-                                                   twRPersonaIx : ByteStream.Read_TWORD8 (),
+                                                   dwRPersonaIx : ByteStream.Read_DWORD (),
                                                 };
 
                                                 this.Emit ('onAvatarHide', SBA_RProximity_Avatar_Hide);
