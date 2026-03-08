@@ -2137,11 +2137,9 @@ MV.MVRP.Proximity = class extends MV.MVMF.NOTIFICATION
                               wSize  = ByteStream.Read_WORD ();
                               wCount = ByteStream.Read_WORD ();
 
-                              // Avatar Open: wCount entries of 112 bytes each (4+4+38+38+4+2+18+2+2 bytes per entry)
-                              const wAvatarOpenSize = wCount * 112;
-                              if (dwSize >= wAvatarOpenSize)
+                              if (dwSize >= wSize  &&  wCount * 8 == wSize)
                               {
-                                 dwSize -= wAvatarOpenSize;
+                                 dwSize -= wSize;
 
                                  const aSBA_RProximity_Avatar_Open_Ex = [];
 
@@ -2149,22 +2147,11 @@ MV.MVRP.Proximity = class extends MV.MVMF.NOTIFICATION
                                  {
                                     aSBA_RProximity_Avatar_Open_Ex[w] =
                                     {
-                                       dwRPersonaIx : ByteStream.Read_DWORD (),
-                                       dwReserved   : ByteStream.Read_DWORD (),
-                                       Name         :
-                                       {
-                                          wszForename : ByteStream.Read_String_W (38),
-                                          wszSurname  : ByteStream.Read_String_W (38),
-                                          dwSequence  : ByteStream.Read_DWORD (),
-                                       },
-                                       wAvatarIx    : ByteStream.Read_WORD (),
-                                       bAppearance  : ByteStream.Read_Binary (18),
-                                       wScale       : ByteStream.Read_WORD (),
-                                       wHeight_User : ByteStream.Read_WORD (),
+                                       twRPersonaIx : ByteStream.Read_TWORD8 (),
                                     };
                                  }
 
-                                 if (wCount > 0 && dwSize >= 4)
+                                 if (dwSize >= 4)
                                  {
                                     dwSize -= 4;
 
