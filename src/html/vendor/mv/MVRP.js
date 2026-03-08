@@ -2137,9 +2137,11 @@ MV.MVRP.Proximity = class extends MV.MVMF.NOTIFICATION
                               wSize  = ByteStream.Read_WORD ();
                               wCount = ByteStream.Read_WORD ();
 
-                              if (dwSize >= wSize  &&  wCount * 112 == wSize)  // 112 = 4+4+38+38+4+2+18+2+2 bytes per entry
+                              // Avatar Open: wCount entries of 112 bytes each (4+4+38+38+4+2+18+2+2 bytes per entry)
+                              const wAvatarOpenSize = wCount * 112;
+                              if (dwSize >= wAvatarOpenSize)
                               {
-                                 dwSize -= wSize;
+                                 dwSize -= wAvatarOpenSize;
 
                                  const aSBA_RProximity_Avatar_Open_Ex = [];
 
@@ -2228,9 +2230,11 @@ MV.MVRP.Proximity = class extends MV.MVMF.NOTIFICATION
                                           wSize  = ByteStream.Read_WORD ();
                                           wCount = ByteStream.Read_WORD ();
 
-                                          if (dwSize >= wSize  &&  wCount * 4 == wSize)
+                                          // Avatar Hide: wCount entries of 4 bytes each (DWORD per avatar)
+                                          const wAvatarHideSize = wCount * 4;
+                                          if (dwSize >= wAvatarHideSize)
                                           {
-                                             dwSize -= wSize;
+                                             dwSize -= wAvatarHideSize;
 
                                              for (w=0; w<wCount; w++)
                                              {
