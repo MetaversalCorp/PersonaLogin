@@ -105,13 +105,13 @@ export class ProximityAvatarList {
         const eventData = args[0];
         ///console.log('[ProximityAvatarList] Intercepted onAvatarUpdate');
         self.handleAvatarUpdate(eventData);
-      } else if (eventName === 'onModelClose' && args.length > 0) {
-        const dwRPersonaIx = args[0];
-        console.log('[ProximityAvatarList] Intercepted onModelClose:', dwRPersonaIx);
-        self.onModelClose(dwRPersonaIx);
-      } else if (eventName === 'onModelHide' && args.length > 0) {
-        const dwRPersonaIx = args[0];
-        console.log('[ProximityAvatarList] Intercepted onModelHide:', dwRPersonaIx);
+      } else if (eventName === 'onAvatarClose' && args.length > 0) {
+        const twRPersonaIx = args[0].twRPersonaIx;
+        console.log('[ProximityAvatarList] Intercepted onAvatarClose:', twRPersonaIx);
+        self.onModelClose(twRPersonaIx);
+      } else if (eventName === 'onAvatarHide' && args.length > 0) {
+        const dwRPersonaIx = args[0].dwRPersonaIx;
+        console.log('[ProximityAvatarList] Intercepted onAvatarHide:', dwRPersonaIx);
         self.onModelHide(dwRPersonaIx);
       } else if (eventName === 'onUserReady' && args.length >= 5) {
         const [, dwRPersonaIx, nX, nY, nZ] = args;
