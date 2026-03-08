@@ -2164,7 +2164,7 @@ MV.MVRP.Proximity = class extends MV.MVMF.NOTIFICATION
                                     };
                                  }
 
-                                 if (dwSize >= 4)
+                                 if (wCount > 0 && dwSize >= 4)
                                  {
                                     dwSize -= 4;
 
