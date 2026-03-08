@@ -2273,10 +2273,6 @@ MV.MVRP.Proximity = class extends MV.MVMF.NOTIFICATION
                                                 }
                                              }
 
-                                             if (dwSize == 0)
-                                             {
-                                                bSuccess = true;
-                                             }
                                           }
                                        }
                                     }
@@ -2290,17 +2286,6 @@ MV.MVRP.Proximity = class extends MV.MVMF.NOTIFICATION
             }
          }
       }
-
-      // If we've successfully parsed all avatar data, mark success
-      // regardless of audio parsing outcome. Audio data may be optional
-      // or may fail gracefully.
-      if (wCount >= 0)  // We parsed at least the avatar headers
-      {
-         bSuccess = true;
-      }
-
-      if (bSuccess == false)
-         debugger;
 
       return false;
    }
