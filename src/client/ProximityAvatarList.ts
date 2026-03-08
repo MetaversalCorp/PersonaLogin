@@ -183,7 +183,7 @@ export class ProximityAvatarList {
     let name = this.avatarNames.get(dwRPersonaIx) || 'Unknown';
     if (avatarOpenExArray && Array.isArray(avatarOpenExArray)) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const avatarOpenEx = avatarOpenExArray.find((a: any) => a.dwRPersonaIx === dwRPersonaIx);
+      const avatarOpenEx = avatarOpenExArray.find((a: any) => a.twRPersonaIx === dwRPersonaIx);
       if (avatarOpenEx && avatarOpenEx.Name) {
         const forename = avatarOpenEx.Name.wszForename || '';
         const surname = avatarOpenEx.Name.wszSurname || '';
