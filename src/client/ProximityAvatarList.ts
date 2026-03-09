@@ -107,13 +107,13 @@ export class ProximityAvatarList {
       } else if (eventName === 'onAvatarClose' && args.length > 0) {
         const twRPersonaIx = args[0].twRPersonaIx;
         console.log('[ProximityAvatarList] Intercepted onAvatarClose:', twRPersonaIx);
-        // Defer to prevent audio corruption
-        queueMicrotask(() => self.onModelClose(twRPersonaIx));
+        // Defer to next event loop tick to prevent audio corruption
+        setTimeout(() => self.onModelClose(twRPersonaIx), 0);
       } else if (eventName === 'onAvatarHide' && args.length > 0) {
         const personaIx = args[0].twRPersonaIx || args[0].dwRPersonaIx;
         console.log('[ProximityAvatarList] Intercepted onAvatarHide:', personaIx);
-        // Defer to prevent audio corruption during packet parsing
-        queueMicrotask(() => self.onModelHide(personaIx));
+        // Defer to next event loop tick to prevent audio corruption during packet parsing
+        setTimeout(() => self.onModelHide(personaIx), 0);
       } else if (eventName === 'onUserReady' && args.length >= 5) {
         const [, dwRPersonaIx, nX, nY, nZ] = args;
         console.log('[ProximityAvatarList] Intercepted onUserReady:', dwRPersonaIx);
