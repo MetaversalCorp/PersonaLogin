@@ -1,4 +1,5 @@
 import type { ProximityAudioManager } from '../audio/ProximityAudioManager.js';
+import { PersonaInfoCache } from './PersonaInfoCache.js';
 
 /**
  * Avatar info with calculated distance for sorting and display.
@@ -25,11 +26,18 @@ export class ProximityAvatarListener {
   private observers: Set<(avatars: AvatarInfo[]) => void> = new Set();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private proximity: any = null;
+  /** Cache for resolving external avatar names via RPersona_Cache. */
+  private personaInfoCache: PersonaInfoCache | null = null;
+  /** Tracks persona IDs already requested from the cache to avoid duplicate fetches. */
+  private cacheRequestedIds: Set<number> = new Set();
 
   /**
    * Initialize the proximity tracker and attach to the Proximity instance.
    * Proximity will call our onModelUpdate/onModelClose/onUserReady methods
    * whenever avatar events occur.
+   *
+   * Also creates a PersonaInfoCache backed by pLnG from the audio manager to
+   * resolve external avatar names that are missing from the Avatar Open packet.
    */
   init(audioManager: ProximityAudioManager): void {
     const proximity = audioManager.getProximity();
@@ -41,6 +49,12 @@ export class ProximityAvatarListener {
     this.proximity = proximity;
     proximity.Attach(this);
     console.log('[ProximityAvatarListener] Attached to Proximity');
+
+    const pLnG = audioManager.getPLnG();
+    if (pLnG) {
+      this.personaInfoCache = new PersonaInfoCache(pLnG);
+      console.log('[ProximityAvatarListener] PersonaInfoCache created');
+    }
   }
 
   /**
@@ -76,6 +90,18 @@ export class ProximityAvatarListener {
       const forename = SBA_RProximity_Avatar_Open_Ex.Name?.wszForename ?? '';
       const surname = SBA_RProximity_Avatar_Open_Ex.Name?.wszSurname ?? '';
       name = `${forename} ${surname}`.trim() || `Avatar ${dwRPersonaIx}`;
+
+      // If the Avatar Open packet contained no name metadata, request from cache.
+      if (name === `Avatar ${dwRPersonaIx}` && this.personaInfoCache && !this.cacheRequestedIds.has(dwRPersonaIx)) {
+        this.cacheRequestedIds.add(dwRPersonaIx);
+        this.personaInfoCache.requestName(dwRPersonaIx, (resolvedName) => {
+          const existing = this.avatars.get(dwRPersonaIx);
+          if (existing && existing.name === `Avatar ${dwRPersonaIx}`) {
+            existing.name = resolvedName;
+            this.notifyObservers();
+          }
+        });
+      }
     } else {
       const existing = this.avatars.get(dwRPersonaIx);
       if (!existing) return;
@@ -209,7 +235,13 @@ export class ProximityAvatarListener {
       this.proximity = null;
     }
 
+    if (this.personaInfoCache) {
+      this.personaInfoCache.dispose();
+      this.personaInfoCache = null;
+    }
+
     this.avatars.clear();
+    this.cacheRequestedIds.clear();
     this.observers.clear();
   }
 }
