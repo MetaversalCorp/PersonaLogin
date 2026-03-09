@@ -2223,14 +2223,11 @@ MV.MVRP.Proximity = class extends MV.MVMF.NOTIFICATION
                                           {
                                              dwSize -= wAvatarHideSize;
 
+                                             const aSBA_RProximity_Avatar_Hide = [];
+
                                              for (w=0; w<wCount; w++)
                                              {
-                                                const SBA_RProximity_Avatar_Hide =
-                                                {
-                                                   dwRPersonaIx : ByteStream.Read_DWORD (),
-                                                };
-
-                                                this.Emit ('onAvatarHide', SBA_RProximity_Avatar_Hide);
+                                                aSBA_RProximity_Avatar_Hide.push ({ dwRPersonaIx : ByteStream.Read_DWORD () });
                                              }
 
                                              if (dwSize >= 8)
@@ -2258,6 +2255,11 @@ MV.MVRP.Proximity = class extends MV.MVMF.NOTIFICATION
                                                       }
                                                    }
                                                 }
+                                             }
+
+                                             for (w=0; w<aSBA_RProximity_Avatar_Hide.length; w++)
+                                             {
+                                                this.Emit ('onAvatarHide', aSBA_RProximity_Avatar_Hide[w]);
                                              }
 
                                           }
