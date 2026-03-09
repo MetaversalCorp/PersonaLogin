@@ -2,6 +2,7 @@ import type { ProximityAudioManager } from '../audio/ProximityAudioManager.js';
 import { AudioFrameCapture } from '../audio/AudioFrameCapture.js';
 import { ProximityAvatarList } from './ProximityAvatarList.js';
 import type { AvatarInfo } from './ProximityAvatarList.js';
+import { PersonaInfoCache } from './PersonaInfoCache.js';
 
 /** Options for configuring the AudioVisualizer. */
 export interface VisualizerOptions {
@@ -52,6 +53,8 @@ export class AudioVisualizer {
   // ProximityAvatarList tracks nearby avatars and updates the proximity panel
   private proximityList: ProximityAvatarList | null = null;
   private proximityPanel: HTMLElement | null = null;
+  // PersonaInfoCache resolves external avatar names from RPersona_Cache
+  private personaInfoCache: PersonaInfoCache | null = null;
   // Scratch buffer for reading PCM samples from the audioCapture ring buffer
   private readonly readBuffer: Float32Array = new Float32Array(960);
 
@@ -146,7 +149,13 @@ export class AudioVisualizer {
 
     // Initialize proximity avatar list and attach to Proximity
     this.proximityList = new ProximityAvatarList();
-    this.proximityList.init(proximity);  // Attach directly to Proximity instance
+    // Create a PersonaInfoCache so unidentified external avatars can have their
+    // names resolved from the server via RPersona_Cache (batched, 500 ms window).
+    const pLnG = audioManager.getPLnG();
+    if (pLnG) {
+      this.personaInfoCache = new PersonaInfoCache(pLnG);
+    }
+    this.proximityList.init(proximity, this.personaInfoCache);  // Attach directly to Proximity instance
     this.proximityList.addObserver((avatars: AvatarInfo[]) => this.updateProximityPanel(avatars));
 
     this.proximityPanel = document.getElementById('proximity-panel');
@@ -176,6 +185,11 @@ export class AudioVisualizer {
     if (this.proximityList) {
       this.proximityList.dispose();
       this.proximityList = null;
+    }
+
+    if (this.personaInfoCache) {
+      this.personaInfoCache.dispose();
+      this.personaInfoCache = null;
     }
 
     if (this.animFrameId !== null) {
@@ -286,6 +300,11 @@ export class AudioVisualizer {
     if (this.proximityList) {
       this.proximityList.dispose();
       this.proximityList = null;
+    }
+
+    if (this.personaInfoCache) {
+      this.personaInfoCache.dispose();
+      this.personaInfoCache = null;
     }
     this.proximityPanel = null;
 

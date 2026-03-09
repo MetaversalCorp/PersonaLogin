@@ -1,3 +1,5 @@
+import type { PersonaInfoCache } from './PersonaInfoCache.js';
+
 /**
  * Avatar info with calculated distance for sorting and display.
  */
@@ -23,21 +25,27 @@ export class ProximityAvatarList {
   private observers: Set<(avatars: AvatarInfo[]) => void> = new Set();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private originalEmit: any = null;
+  /** Optional cache for resolving external avatar names via RPersona_Cache. */
+  private personaInfoCache: PersonaInfoCache | null = null;
+  /** Tracks persona IDs already requested from the cache to avoid duplicate fetches. */
+  private cacheRequestedIds: Set<number> = new Set();
 
   /**
    * Initialize and hook into the Proximity instance.
    * Wraps Proximity's Emit method to intercept onAvatarUpdate events.
    *
    * @param proximity The MV.MVRP.Proximity instance from ProximityAudioManager
+   * @param cache     Optional PersonaInfoCache for resolving external avatar names
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  init(proximity: any): void {
+  init(proximity: any, cache?: PersonaInfoCache | null): void {
     if (!proximity) {
       console.warn('[ProximityAvatarList] Proximity instance is null');
       return;
     }
 
     this.proximity = proximity;
+    this.personaInfoCache = cache ?? null;
     this.setupProximityInterception();
 
     console.log('[ProximityAvatarList] Initialized and hooked into Proximity');
@@ -206,6 +214,22 @@ export class ProximityAvatarList {
       distance,
     });
 
+    // If the name is still unresolved and we have a PersonaInfoCache, request
+    // the display name from RPersona_Cache (batched, 500 ms window).
+    // The avatar entry must already be in the map before we register the callback
+    // so that a synchronous cache-hit can update it immediately.
+    if (name === 'Unknown' && this.personaInfoCache && !this.cacheRequestedIds.has(dwRPersonaIx)) {
+      this.cacheRequestedIds.add(dwRPersonaIx);
+      this.personaInfoCache.requestName(dwRPersonaIx, (resolvedName) => {
+        const existing = this.avatars.get(dwRPersonaIx);
+        if (existing && existing.name === 'Unknown') {
+          existing.name = resolvedName;
+          this.avatarNames.set(dwRPersonaIx, resolvedName);
+          this.notifyObservers();
+        }
+      });
+    }
+
     ///console.log('[ProximityAvatarList] Avatar updated:', dwRPersonaIx, name, distance.toFixed(2) + 'm', isNew ? '(NEW)' : '(UPDATE)');
     this.notifyObservers();
   }
@@ -253,6 +277,7 @@ export class ProximityAvatarList {
     console.log('[ProximityAvatarList] onLogout_Client:', bVoluntary);
     this.avatars.clear();
     this.avatarNames.clear();
+    this.cacheRequestedIds.clear();
     this.localPersonaID = null;
     this.notifyObservers();
   }
@@ -315,8 +340,10 @@ export class ProximityAvatarList {
     }
     this.avatars.clear();
     this.avatarNames.clear();
+    this.cacheRequestedIds.clear();
     this.observers.clear();
     this.proximity = null;
     this.originalEmit = null;
+    this.personaInfoCache = null;
   }
 }
