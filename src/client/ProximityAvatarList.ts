@@ -97,10 +97,9 @@ export class ProximityAvatarList {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const self = this;
     this.proximity.Emit = function (eventName: string, ...args: any[]): any {
-      // Call original first
-      const result = self.originalEmit.apply(this, [eventName, ...args]);
+      // Process our handlers FIRST (synchronously)
+      // This prevents event handler re-entrance during audio decoding
 
-      // Intercept onAvatarUpdate event
       if (eventName === 'onAvatarUpdate' && args.length > 0) {
         const eventData = args[0];
         ///console.log('[ProximityAvatarList] Intercepted onAvatarUpdate');
@@ -108,11 +107,13 @@ export class ProximityAvatarList {
       } else if (eventName === 'onAvatarClose' && args.length > 0) {
         const twRPersonaIx = args[0].twRPersonaIx;
         console.log('[ProximityAvatarList] Intercepted onAvatarClose:', twRPersonaIx);
-        self.onModelClose(twRPersonaIx);
+        // Defer to prevent audio corruption
+        queueMicrotask(() => self.onModelClose(twRPersonaIx));
       } else if (eventName === 'onAvatarHide' && args.length > 0) {
-        // const dwRPersonaIx = args[0].dwRPersonaIx;
-        // console.log('[ProximityAvatarList] Intercepted onAvatarHide:', dwRPersonaIx);
-        // self.onModelHide(dwRPersonaIx);
+        const personaIx = args[0].twRPersonaIx || args[0].dwRPersonaIx;
+        console.log('[ProximityAvatarList] Intercepted onAvatarHide:', personaIx);
+        // Defer to prevent audio corruption during packet parsing
+        queueMicrotask(() => self.onModelHide(personaIx));
       } else if (eventName === 'onUserReady' && args.length >= 5) {
         const [, dwRPersonaIx, nX, nY, nZ] = args;
         console.log('[ProximityAvatarList] Intercepted onUserReady:', dwRPersonaIx);
@@ -121,6 +122,10 @@ export class ProximityAvatarList {
         console.log('[ProximityAvatarList] Intercepted onLogout_Client');
         self.onLogout_Client(args[0] || false);
       }
+
+      // Call original Emit AFTER our processing
+      // This ensures audio decoding completes before other listeners fire
+      const result = self.originalEmit.apply(this, [eventName, ...args]);
 
       return result;
     };
