@@ -110,9 +110,9 @@ export class ProximityAvatarList {
         console.log('[ProximityAvatarList] Intercepted onAvatarClose:', twRPersonaIx);
         self.onModelClose(twRPersonaIx);
       } else if (eventName === 'onAvatarHide' && args.length > 0) {
-        const dwRPersonaIx = args[0].dwRPersonaIx;
-        console.log('[ProximityAvatarList] Intercepted onAvatarHide:', dwRPersonaIx);
-        self.onModelHide(dwRPersonaIx);
+        // const dwRPersonaIx = args[0].dwRPersonaIx;
+        // console.log('[ProximityAvatarList] Intercepted onAvatarHide:', dwRPersonaIx);
+        // self.onModelHide(dwRPersonaIx);
       } else if (eventName === 'onUserReady' && args.length >= 5) {
         const [, dwRPersonaIx, nX, nY, nZ] = args;
         console.log('[ProximityAvatarList] Intercepted onUserReady:', dwRPersonaIx);
