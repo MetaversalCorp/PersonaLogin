@@ -1,0 +1,177 @@
+name: PR Premium Token Usage Report
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate PR Premium Token Usage Table
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          python3 << 'PYEOF'
+          import subprocess, json, os, sys
+          from datetime import datetime, timezone
+
+          REPO = os.environ.get('GITHUB_REPOSITORY', 'MetaversalCorp/PersonaLogin')
+          SUMMARY = os.environ.get('GITHUB_STEP_SUMMARY', '/dev/stdout')
+
+          def gh_api(path):
+              """Call gh api with --paginate and return parsed JSON list."""
+              result = subprocess.run(
+                  ['gh', 'api', '--paginate', path],
+                  capture_output=True, text=True
+              )
+              if result.returncode != 0:
+                  print(f'gh api error for {path}: {result.stderr}', file=sys.stderr)
+                  return []
+              # gh --paginate may return multiple JSON arrays concatenated; wrap safely
+              raw = result.stdout.strip()
+              try:
+                  data = json.loads(raw)
+                  if isinstance(data, list):
+                      return data
+                  # Single object returned
+                  return [data]
+              except json.JSONDecodeError:
+                  # Multiple arrays concatenated — join them
+                  items = []
+                  decoder = json.JSONDecoder()
+                  pos = 0
+                  while pos < len(raw):
+                      raw_slice = raw[pos:].lstrip()
+                      if not raw_slice:
+                          break
+                      obj, offset = decoder.raw_decode(raw_slice)
+                      if isinstance(obj, list):
+                          items.extend(obj)
+                      pos += len(raw) - len(raw_slice) + offset
+                  return items
+
+          def count_sessions(commits):
+              """
+              Count distinct Copilot coding agent sessions in a list of PR commits.
+
+              A session is a group of consecutive Copilot-authored commits.  A new
+              session begins whenever the gap between successive Copilot commits
+              exceeds SESSION_GAP_SECONDS (default 5 minutes), which indicates the
+              agent was triggered again — either by a steering comment or a new task.
+              """
+              SESSION_GAP_SECONDS = 300  # 5 minutes
+
+              # Collect timestamps of commits authored or committed by the Copilot app
+              copilot_times = []
+              for c in commits:
+                  committer = (c.get('committer') or {}).get('login', '')
+                  author    = (c.get('author')    or {}).get('login', '')
+                  if 'copilot' in committer.lower() or 'copilot' in author.lower():
+                      raw_ts = c['commit']['committer']['date']
+                      copilot_times.append(
+                          datetime.fromisoformat(raw_ts.replace('Z', '+00:00'))
+                      )
+
+              if not copilot_times:
+                  # The PR was created by the Copilot agent, which always requires at
+                  # least one session; fall back to 1 when no Copilot commits can be
+                  # matched (e.g. the committer login differs from expected values).
+                  return 1
+
+              copilot_times.sort()
+              sessions = 1
+              for i in range(1, len(copilot_times)):
+                  gap = (copilot_times[i] - copilot_times[i - 1]).total_seconds()
+                  if gap > SESSION_GAP_SECONDS:
+                      sessions += 1
+              return sessions
+
+          # ── Fetch all PRs (open + closed) ──────────────────────────────────────
+          prs = gh_api(f'/repos/{REPO}/pulls?state=all&per_page=100')
+          prs.sort(key=lambda p: p['number'], reverse=True)
+
+          rows = []
+          total_tokens = 0
+
+          for pr in prs:
+              pr_num   = pr['number']
+              title    = pr['title']
+              author   = pr['user']['login']
+              state    = pr['state']
+              created  = pr['created_at'][:10]
+              url      = pr['html_url']
+              is_draft = pr.get('draft', False)
+
+              if author == 'Copilot':
+                  commits = gh_api(
+                      f'/repos/{REPO}/pulls/{pr_num}/commits?per_page=100'
+                  )
+                  tokens = count_sessions(commits)
+                  total_tokens += tokens
+              else:
+                  tokens = 0
+
+              rows.append(dict(
+                  pr_num=pr_num,
+                  title=title,
+                  author=author,
+                  state=state,
+                  created=created,
+                  tokens=tokens,
+                  url=url,
+                  is_draft=is_draft,
+              ))
+
+          # ── Write markdown table to job summary ────────────────────────────────
+          copilot_pr_count = sum(1 for r in rows if r['tokens'] > 0)
+
+          lines = []
+          lines.append('# 🪙 Premium Tokens Used by PRs\n')
+          lines.append(f'**Repository:** `{REPO}`  ')
+          lines.append(f'**Report generated:** {datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")}  ')
+          lines.append(f'**Total premium tokens:** {total_tokens} '
+                       f'across {copilot_pr_count} Copilot-authored PR(s)\n')
+          lines.append('| PR | Title | Author | State | Created | Premium Tokens |')
+          lines.append('|---|---|---|---|---|:---:|')
+
+          for r in rows:
+              pr_link = f'[#{r["pr_num"]}]({r["url"]})'
+              title_md = r['title'].replace('|', '&#124;')
+              if len(title_md) > 72:
+                  title_md = title_md[:69] + '...'
+              draft_badge = ' _(draft)_' if r['is_draft'] else ''
+              tok_display = str(r['tokens']) if r['tokens'] else '—'
+              lines.append(
+                  f'| {pr_link} | {title_md}{draft_badge} | {r["author"]} '
+                  f'| {r["state"]} | {r["created"]} | {tok_display} |'
+              )
+
+          lines.append('')
+          lines.append(
+              '> **How tokens are counted:** each Copilot coding agent session '
+              'consumes one premium token.  A session begins when the agent is '
+              'asked to create or update a PR.  Additional steering comments that '
+              'trigger the agent each count as one extra session.  Sessions are '
+              'detected by clustering Copilot commits with a 5-minute gap threshold.'
+          )
+
+          with open(SUMMARY, 'a') as f:
+              f.write('\n'.join(lines) + '\n')
+
+          # ── Print summary to stdout as well ────────────────────────────────────
+          print(f'\nPremium token usage for {REPO}')
+          print(f'Total: {total_tokens} premium tokens '
+                f'across {copilot_pr_count} Copilot PR(s)\n')
+          header = f'{"PR":<6}  {"Tokens":<7}  {"State":<8}  Title'
+          print(header)
+          print('-' * len(header))
+          for r in rows:
+              tok_display = str(r['tokens']) if r['tokens'] else '—'
+              title_short = r['title'][:55]
+              print(f'#{r["pr_num"]:<5}  {tok_display:<7}  {r["state"]:<8}  {title_short}')
+          PYEOF
