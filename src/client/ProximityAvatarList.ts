@@ -18,6 +18,7 @@ export class ProximityAvatarList {
   private proximity: any = null;
   private avatars: Map<number, AvatarInfo> = new Map();
   private avatarNames: Map<number, string> = new Map();
+  private activeIDs: Set<number> = new Set();
   private localPosition: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 };
   private localPersonaID: number | null = null;
   private observers: Set<(avatars: AvatarInfo[]) => void> = new Set();
@@ -172,6 +173,8 @@ export class ProximityAvatarList {
       distance,
     });
 
+    this.activeIDs.add(dwRPersonaIx);
+
     ///console.log('[ProximityAvatarList] Avatar updated:', dwRPersonaIx, name, distance.toFixed(2) + 'm', isNew ? '(NEW)' : '(UPDATE)');
     this.notifyObservers();
   }
@@ -187,26 +190,36 @@ export class ProximityAvatarList {
   }
 
   /**
-   * Proximity event handler: Called when avatar closes (leaves world).
+   * Proximity event handler: Called when avatar closes (leaves world permanently).
+   * Avatar is fully deleted from both the map and activeIDs.
+   * Note: onAvatarClose fires after onAvatarHide in the avatar lifecycle, which
+   * ensures inactive entries from onAvatarHide are eventually cleaned up.
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onAvatarClose(pNotice: any): void {
     if (!pNotice || !pNotice.pData) return;
     const twRPersonaIx = pNotice.pData.twRPersonaIx;
     console.log('[ProximityAvatarList] onAvatarClose:', twRPersonaIx);
+    this.activeIDs.delete(twRPersonaIx);
     this.onModelClose(twRPersonaIx);
   }
 
   /**
-   * Proximity event handler: Called when avatar hides (goes out of range).
-   * This runs AFTER audio packet parsing completes.
+   * Proximity event handler: Called when avatar hides (goes temporarily out of range).
+   * Marks avatar inactive instead of deleting - prevents audio buffer corruption
+   * during MVRP packet parsing. Follows RP1Demo ExternalAvatarsController pattern.
+   * The avatar remains in this.avatars; it will be fully removed when onAvatarClose fires.
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onAvatarHide(pNotice: any): void {
     if (!pNotice || !pNotice.pData) return;
     const twRPersonaIx = pNotice.pData.twRPersonaIx;
     console.log('[ProximityAvatarList] onAvatarHide:', twRPersonaIx);
-    this.onModelHide(twRPersonaIx);
+
+    // Only mark inactive - do NOT delete the avatar or call notifyObservers()
+    // Deleting during packet parsing corrupts the audio buffer.
+    // The avatar will be fully removed when onAvatarClose fires.
+    this.activeIDs.delete(twRPersonaIx);
   }
 
   /**
@@ -271,6 +284,7 @@ export class ProximityAvatarList {
   private handleLogoutClient(bVoluntary: boolean): void {
     this.avatars.clear();
     this.avatarNames.clear();
+    this.activeIDs.clear();
     this.localPersonaID = null;
     this.notifyObservers();
   }
@@ -288,9 +302,11 @@ export class ProximityAvatarList {
 
   /**
    * Get the 10 closest avatars, sorted by distance.
+   * Only returns avatars that are currently active (not hidden).
    */
   getClosestAvatars(count: number = 10): AvatarInfo[] {
     return Array.from(this.avatars.values())
+      .filter(avatar => this.activeIDs.has(avatar.personaID))
       .sort((a, b) => a.distance - b.distance)
       .slice(0, count);
   }
@@ -333,6 +349,7 @@ export class ProximityAvatarList {
     }
     this.avatars.clear();
     this.avatarNames.clear();
+    this.activeIDs.clear();
     this.observers.clear();
     this.proximity = null;
   }
