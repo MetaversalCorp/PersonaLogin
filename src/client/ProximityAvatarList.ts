@@ -181,17 +181,18 @@ export class ProximityAvatarList {
    * This runs OUTSIDE the packet parsing callstack.
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  onAvatarUpdate(eventData: any): void {
-    if (!eventData) return;
-    this.handleAvatarUpdate(eventData);
+  onAvatarUpdate(pNotice: any): void {
+    if (!pNotice || !pNotice.pData) return;
+    this.handleAvatarUpdate(pNotice.pData);
   }
 
   /**
    * Proximity event handler: Called when avatar closes (leaves world).
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  onAvatarClose(SBA_RProximity_Avatar_Close: any): void {
-    const twRPersonaIx = SBA_RProximity_Avatar_Close.twRPersonaIx;
+  onAvatarClose(pNotice: any): void {
+    if (!pNotice || !pNotice.pData) return;
+    const twRPersonaIx = pNotice.pData.twRPersonaIx;
     console.log('[ProximityAvatarList] onAvatarClose:', twRPersonaIx);
     this.onModelClose(twRPersonaIx);
   }
@@ -201,8 +202,9 @@ export class ProximityAvatarList {
    * This runs AFTER audio packet parsing completes.
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  onAvatarHide(SBA_RProximity_Avatar_Hide: any): void {
-    const twRPersonaIx = SBA_RProximity_Avatar_Hide.twRPersonaIx;
+  onAvatarHide(pNotice: any): void {
+    if (!pNotice || !pNotice.pData) return;
+    const twRPersonaIx = pNotice.pData.twRPersonaIx;
     console.log('[ProximityAvatarList] onAvatarHide:', twRPersonaIx);
     this.onModelHide(twRPersonaIx);
   }
