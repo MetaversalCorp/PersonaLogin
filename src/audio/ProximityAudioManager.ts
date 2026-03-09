@@ -210,8 +210,6 @@ export class ProximityAudioManager {
 
   /**
    * Returns the pLnG service client that was provided to the constructor.
-   * Exposed so that consumers (e.g. AudioVisualizer) can create a
-   * PersonaInfoCache without needing a separate reference to pLnG.
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getPLnG(): any {
