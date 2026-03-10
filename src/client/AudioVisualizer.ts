@@ -287,9 +287,14 @@ export class AudioVisualizer {
       this.proximityList.dispose();
       this.proximityList = null;
     }
-    this.proximityPanel = null;
 
     this.audioManager = null;
+
+    if (this.proximityList) {
+      this.proximityList.dispose();
+      this.proximityList = null;
+    }
+    this.proximityPanel = null;
 
     if (this.canvas.parentNode) {
       this.canvas.parentNode.removeChild(this.canvas);

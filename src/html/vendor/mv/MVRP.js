@@ -2217,17 +2217,18 @@ MV.MVRP.Proximity = class extends MV.MVMF.NOTIFICATION
                                           wSize  = ByteStream.Read_WORD ();
                                           wCount = ByteStream.Read_WORD ();
 
-                                          // Avatar Hide: wCount entries of 4 bytes each (DWORD per avatar)
-                                          const wAvatarHideSize = wCount * 4;
-                                          if (dwSize >= wAvatarHideSize)
+                                          if (dwSize >= wSize  &&  wCount * 8 == wSize)
                                           {
-                                             dwSize -= wAvatarHideSize;
-
-                                             const aSBA_RProximity_Avatar_Hide = [];
+                                             dwSize -= wSize;
 
                                              for (w=0; w<wCount; w++)
                                              {
-                                                aSBA_RProximity_Avatar_Hide.push ({ dwRPersonaIx : ByteStream.Read_DWORD () });
+                                                const SBA_RProximity_Avatar_Hide =
+                                                {
+                                                   twRPersonaIx : ByteStream.Read_TWORD8 (),
+                                                };
+
+                                                this.Emit ('onAvatarHide', SBA_RProximity_Avatar_Hide);
                                              }
 
                                              if (dwSize >= 8)
@@ -2256,12 +2257,6 @@ MV.MVRP.Proximity = class extends MV.MVMF.NOTIFICATION
                                                    }
                                                 }
                                              }
-
-                                             for (w=0; w<aSBA_RProximity_Avatar_Hide.length; w++)
-                                             {
-                                                this.Emit ('onAvatarHide', aSBA_RProximity_Avatar_Hide[w]);
-                                             }
-
                                           }
                                        }
                                     }
@@ -2275,6 +2270,9 @@ MV.MVRP.Proximity = class extends MV.MVMF.NOTIFICATION
             }
          }
       }
+
+      if (bSuccess == false)
+         debugger;
 
       return false;
    }
