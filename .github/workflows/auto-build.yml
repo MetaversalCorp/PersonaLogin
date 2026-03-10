@@ -1,0 +1,39 @@
+name: Auto-build Deploy
+
+on:
+  push:
+    branches:
+      - main
+      - proximity
+      - live
+    paths-ignore:
+      - 'deploy/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js  
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+      
+      - name: Install
+        run: npm ci
+      
+      - name: Build
+        run: npm run build
+      
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add deploy/
+          git diff --staged --quiet || (git commit -m "🤖 Auto-rebuild deploy/" && git push)
