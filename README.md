@@ -98,7 +98,7 @@ No `.env` file is required for local development. Server endpoints and session p
 
 4. **Teleport** Executes a single Avatar Update message to the server
 
-5. **Start Avatar Update** Sents Avatar Update continuously
+5. **Start Avatar Update** Sends Avatar Update continuously
 
 6. **Direct Teleports** Takes you to *RP1 Start* and *Plaza* which is occupied by roaming bots constantly speaking
 
@@ -117,7 +117,7 @@ PersonaLogin is the member-facing login and avatar entry client for the **Metave
 | Workflow | Description |
 |---|---|
 | **User authentication** | Member credentials are encoded with `MV.MVMF.Encode` and passed to `pLnG.Login()`. LnG handles all HTTP communication with RP1 servers and token exchange internally. Optional 2FA is handled via a callback/promise flow. |
-| **Persona selection** | After login, the user's personas are enumerated via `pRUser.Child_Enum('RPersona', …)`. The first persona is auto-selected, or the user can choose one from the picker UI. |
+| **Persona selection** | After login, the user's personas are enumerated via `pRUser.Child_Enum('RPersona', …)`. The first persona is auto-selected. |
 | **Avatar model loading** | `PersonaPuppet.spawn()` loads the avatar model via `@metaversalcorp/mvrp` at runtime. |
 | **Avatar entry into world** | `pRUser.Send('RPERSONA_ENTER', …)` places the avatar at the starting location. The `pRPersona` model is opened with `pLnG.Model_Open('RPersona', personaId)`. |
 | **Avatar repositioning (teleport)** | Lat/lon/radius coordinates are converted to Cartesian (Y-up) and sent as an `UPDATE` message via `pRPersona.Send('UPDATE', …)`. |

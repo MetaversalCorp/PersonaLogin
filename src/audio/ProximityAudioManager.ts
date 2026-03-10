@@ -209,14 +209,6 @@ export class ProximityAudioManager {
   }
 
   /**
-   * Returns the pLnG service client that was provided to the constructor.
-   */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  getPLnG(): any {
-    return this.pLnG;
-  }
-
-  /**
    * Connect an AudioFrameCapture instance to the audio stream.
    * Designed to be called after the player is available (i.e. after start()).
    * @param capture The AudioFrameCapture instance to wire in.
