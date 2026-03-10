@@ -293,6 +293,9 @@ pRPersona.Send('UPDATE', {
 });
 ```
 
+## Live Deployment
+Merge main to live branch to deploy to: https://metaversalcorp.github.io/PersonaLogin/
+
 ### When This Is Sent
 
 | Trigger | Sender | Notes |
