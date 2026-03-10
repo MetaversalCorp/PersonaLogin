@@ -17,15 +17,15 @@ export class ProximityAvatarList {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private proximity: any = null;
   private avatars: Map<number, AvatarInfo> = new Map();
-  private avatarNames: Map<number, string> = new Map();
-  private activeIDs: Set<number> = new Set();
   private localPosition: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 };
   private localPersonaID: number | null = null;
   private observers: Set<(avatars: AvatarInfo[]) => void> = new Set();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private originalEmit: any = null;
 
   /**
    * Initialize and hook into the Proximity instance.
-   * Uses Proximity.Attach() to register as a listener.
+   * Wraps Proximity's Emit method to intercept onAvatarUpdate events.
    *
    * @param proximity The MV.MVRP.Proximity instance from ProximityAudioManager
    */
@@ -37,7 +37,7 @@ export class ProximityAvatarList {
     }
 
     this.proximity = proximity;
-    this.setupProximityListeners();
+    this.setupProximityInterception();
 
     console.log('[ProximityAvatarList] Initialized and hooked into Proximity');
   }
@@ -80,25 +80,57 @@ export class ProximityAvatarList {
   }
 
   /**
-   * Register event listeners using Proximity.Attach() pattern.
-   * This keeps handlers outside the packet parsing callstack.
+   * Intercept Proximity's Emit method to capture onAvatarUpdate events.
+   * Similar to setupDecodeInterception in ProximityAudioManager.
    */
-  private setupProximityListeners(): void {
-    if (!this.proximity || typeof this.proximity.Attach !== 'function') {
-      console.warn('[ProximityAvatarList] Proximity.Attach not found');
+  private setupProximityInterception(): void {
+    if (!this.proximity || typeof this.proximity.Emit !== 'function') {
+      console.warn('[ProximityAvatarList] Proximity.Emit not found');
       return;
     }
 
-    // Register this instance as a listener
-    this.proximity.Attach(this);
+    // Store original Emit method
+    this.originalEmit = this.proximity.Emit;
 
-    console.log('[ProximityAvatarList] Attached to Proximity event listeners');
+    // Wrap Emit to intercept events
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const self = this;
+    this.proximity.Emit = function (eventName: string, ...args: any[]): any {
+      // Call original first
+      const result = self.originalEmit.apply(this, [eventName, ...args]);
+
+      // Intercept onAvatarUpdate event
+      if (eventName === 'onAvatarUpdate' && args.length > 0) {
+        const eventData = args[0];
+        ///console.log('[ProximityAvatarList] Intercepted onAvatarUpdate');
+        self.handleAvatarUpdate(eventData);
+      } else if (eventName === 'onModelClose' && args.length > 0) {
+        const dwRPersonaIx = args[0];
+        console.log('[ProximityAvatarList] Intercepted onModelClose:', dwRPersonaIx);
+        self.onModelClose(dwRPersonaIx);
+      } else if (eventName === 'onModelHide' && args.length > 0) {
+        const dwRPersonaIx = args[0];
+        console.log('[ProximityAvatarList] Intercepted onModelHide:', dwRPersonaIx);
+        self.onModelHide(dwRPersonaIx);
+      } else if (eventName === 'onUserReady' && args.length >= 5) {
+        const [, dwRPersonaIx, nX, nY, nZ] = args;
+        console.log('[ProximityAvatarList] Intercepted onUserReady:', dwRPersonaIx);
+        self.updateLocalPosition(dwRPersonaIx, { x: nX, y: nY, z: nZ });
+      } else if (eventName === 'onLogout_Client') {
+        console.log('[ProximityAvatarList] Intercepted onLogout_Client');
+        self.onLogout_Client(args[0] || false);
+      }
+
+      return result;
+    };
+
+    console.log('[ProximityAvatarList] Wrapped Proximity.Emit for event interception');
   }
 
   /**
    * Handle onAvatarUpdate event with batch avatar data.
    * The event contains:
-   * - aSBA_RProximity_Avatar_Open_Ex: Array of avatar metadata (dwRPersonaIx, Name, etc.)
+   * - aSBA_RProximity_Avatar_Open_Ex: Array of persona IDs
    * - SBA_RProximity_Avatar_Update_Ex: Avatar state with position data
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -129,12 +161,15 @@ export class ProximityAvatarList {
       return;
     }
 
-    const vPosition = pState.pPosition_Head?.pRelative?.vPosition;
+    const positionHead = pState.pPosition_Head;
+    const vPosition = positionHead?.pRelative?.vPosition;
+
     if (!vPosition) {
       console.warn('[ProximityAvatarList] No vPosition in pPosition_Head');
       return;
     }
 
+    // vPosition has dX, dY, dZ (world coordinates)
     const position = {
       x: vPosition.dX,
       y: vPosition.dY,
@@ -146,24 +181,26 @@ export class ProximityAvatarList {
     // Determine if this is a new avatar (first appearance)
     const isNew = !this.avatars.has(dwRPersonaIx);
 
-    // Extract name from aSBA_RProximity_Avatar_Open_Ex by matching persona ID
+    // Get name from avatarOpenExArray if available
     let name = 'Unknown';
     if (avatarOpenExArray && Array.isArray(avatarOpenExArray)) {
+      // avatarOpenExArray contains persona IDs in the batch update
+      // If this is a new avatar, we might have name data
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const avatarOpenEx = avatarOpenExArray.find((a: any) => a.dwRPersonaIx === dwRPersonaIx);
+      const avatarOpenEx = avatarOpenExArray.find((a: any) => a.twRPersonaIx === dwRPersonaIx);
       if (avatarOpenEx && avatarOpenEx.Name) {
         const forename = avatarOpenEx.Name.wszForename || '';
         const surname = avatarOpenEx.Name.wszSurname || '';
-        const fullName = (forename + ' ' + surname).trim();
-        if (fullName) {
-          name = fullName;
-          this.avatarNames.set(dwRPersonaIx, name);
-        }
+        name = (forename + ' ' + surname).trim() || 'Unknown';
       }
     }
-    // Use cached name for updates without Name data
-    if (name === 'Unknown' && this.avatarNames.has(dwRPersonaIx)) {
-      name = this.avatarNames.get(dwRPersonaIx) || 'Unknown';
+
+    // Preserve existing name if this is an update, not new
+    if (!isNew) {
+      const existing = this.avatars.get(dwRPersonaIx);
+      if (existing) {
+        name = existing.name;
+      }
     }
 
     this.avatars.set(dwRPersonaIx, {
@@ -173,73 +210,8 @@ export class ProximityAvatarList {
       distance,
     });
 
-    this.activeIDs.add(dwRPersonaIx);
-
     ///console.log('[ProximityAvatarList] Avatar updated:', dwRPersonaIx, name, distance.toFixed(2) + 'm', isNew ? '(NEW)' : '(UPDATE)');
     this.notifyObservers();
-  }
-
-  /**
-   * Proximity event handler: Called when avatar update batch arrives.
-   * This runs OUTSIDE the packet parsing callstack.
-   */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  onAvatarUpdate(pNotice: any): void {
-    if (!pNotice || !pNotice.pData) return;
-    this.handleAvatarUpdate(pNotice.pData);
-  }
-
-  /**
-   * Proximity event handler: Called when avatar closes (leaves world permanently).
-   * Avatar is fully deleted from both the map and activeIDs.
-   * Note: onAvatarClose fires after onAvatarHide in the avatar lifecycle, which
-   * ensures inactive entries from onAvatarHide are eventually cleaned up.
-   */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  onAvatarClose(pNotice: any): void {
-    if (!pNotice || !pNotice.pData) return;
-    const twRPersonaIx = pNotice.pData.twRPersonaIx;
-    console.log('[ProximityAvatarList] onAvatarClose:', twRPersonaIx);
-    this.activeIDs.delete(twRPersonaIx);
-    this.onModelClose(twRPersonaIx);
-  }
-
-  /**
-   * Proximity event handler: Called when avatar hides (goes temporarily out of range).
-   * Marks avatar inactive instead of deleting - prevents audio buffer corruption
-   * during MVRP packet parsing. Follows RP1Demo ExternalAvatarsController pattern.
-   * The avatar remains in this.avatars; it will be fully removed when onAvatarClose fires.
-   */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  onAvatarHide(pNotice: any): void {
-    if (!pNotice || !pNotice.pData) return;
-    const twRPersonaIx = pNotice.pData.twRPersonaIx;
-    console.log('[ProximityAvatarList] onAvatarHide:', twRPersonaIx);
-
-    // Only mark inactive - do NOT delete the avatar or call notifyObservers()
-    // Deleting during packet parsing corrupts the audio buffer.
-    // The avatar will be fully removed when onAvatarClose fires.
-    this.activeIDs.delete(twRPersonaIx);
-  }
-
-  /**
-   * Proximity event handler: Called when user is ready.
-   */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  onUserReady(...args: any[]): void {
-    if (args.length >= 5) {
-      const [, dwRPersonaIx, nX, nY, nZ] = args;
-      console.log('[ProximityAvatarList] onUserReady:', dwRPersonaIx);
-      this.updateLocalPosition(dwRPersonaIx, { x: nX, y: nY, z: nZ });
-    }
-  }
-
-  /**
-   * Proximity event handler: Called when client logs out.
-   */
-  onLogout_Client(bVoluntary: boolean): void {
-    console.log('[ProximityAvatarList] onLogout_Client:', bVoluntary);
-    this.handleLogoutClient(bVoluntary);
   }
 
   /**
@@ -281,10 +253,9 @@ export class ProximityAvatarList {
    * Avatar event callback: User has logged out.
    * Clear all tracked avatars.
    */
-  private handleLogoutClient(bVoluntary: boolean): void {
+  onLogout_Client(bVoluntary: boolean): void {
+    console.log('[ProximityAvatarList] onLogout_Client:', bVoluntary);
     this.avatars.clear();
-    this.avatarNames.clear();
-    this.activeIDs.clear();
     this.localPersonaID = null;
     this.notifyObservers();
   }
@@ -302,11 +273,9 @@ export class ProximityAvatarList {
 
   /**
    * Get the 10 closest avatars, sorted by distance.
-   * Only returns avatars that are currently active (not hidden).
    */
   getClosestAvatars(count: number = 10): AvatarInfo[] {
     return Array.from(this.avatars.values())
-      .filter(avatar => this.activeIDs.has(avatar.personaID))
       .sort((a, b) => a.distance - b.distance)
       .slice(0, count);
   }
@@ -336,21 +305,20 @@ export class ProximityAvatarList {
   }
 
   /**
-   * Clean up: Detach from Proximity listeners.
+   * Clean up: Unwrap Proximity if needed.
    */
   dispose(): void {
-    if (this.proximity && typeof this.proximity.Detach === 'function') {
+    if (this.proximity && this.originalEmit) {
       try {
-        this.proximity.Detach(this);
-        console.log('[ProximityAvatarList] Detached from Proximity');
+        this.proximity.Emit = this.originalEmit;
+        console.log('[ProximityAvatarList] Unwrapped Proximity.Emit');
       } catch (err) {
         console.error('[ProximityAvatarList] Error during cleanup:', err);
       }
     }
     this.avatars.clear();
-    this.avatarNames.clear();
-    this.activeIDs.clear();
     this.observers.clear();
     this.proximity = null;
+    this.originalEmit = null;
   }
 }
