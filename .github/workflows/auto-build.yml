@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - proximity
+      - live
     paths-ignore:
       - 'deploy/**'
 
