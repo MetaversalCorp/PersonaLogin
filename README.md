@@ -28,7 +28,7 @@ Open (`http://localhost:8090`) in web browser.
 Log in with registered account
 
 ### 4. Live demo
-[Live demo](https://cdn.rp1.com/res/apps/personalogin/)
+[Live demo: Github Page](https://metaversalcorp.github.io/PersonaLogin/)
 
 ---
 
@@ -292,6 +292,9 @@ pRPersona.Send('UPDATE', {
   abData: new Uint8Array(0),
 });
 ```
+
+## Live Deployment
+Merge main to live branch to deploy to: https://metaversalcorp.github.io/PersonaLogin/
 
 ### When This Is Sent
 
