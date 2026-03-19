@@ -1,3 +1,5 @@
+import type { PersonaInfoCache } from './PersonaInfoCache.js';
+
 /**
  * Avatar info with calculated distance for sorting and display.
  */
@@ -22,21 +24,24 @@ export class ProximityAvatarList {
   private observers: Set<(avatars: AvatarInfo[]) => void> = new Set();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private originalEmit: any = null;
+  private personaInfoCache: PersonaInfoCache | null = null;
 
   /**
    * Initialize and hook into the Proximity instance.
    * Wraps Proximity's Emit method to intercept onAvatarUpdate events.
    *
    * @param proximity The MV.MVRP.Proximity instance from ProximityAudioManager
+   * @param cache     Optional PersonaInfoCache for resolving avatar names
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  init(proximity: any): void {
+  init(proximity: any, cache?: PersonaInfoCache): void {
     if (!proximity) {
       console.warn('[ProximityAvatarList] Proximity instance is null');
       return;
     }
 
     this.proximity = proximity;
+    this.personaInfoCache = cache ?? null;
     this.setupProximityInterception();
 
     console.log('[ProximityAvatarList] Initialized and hooked into Proximity');
@@ -212,6 +217,17 @@ export class ProximityAvatarList {
 
     ///console.log('[ProximityAvatarList] Avatar updated:', dwRPersonaIx, name, distance.toFixed(2) + 'm', isNew ? '(NEW)' : '(UPDATE)');
     this.notifyObservers();
+
+    // Request the real display name from the Persona service for new avatars.
+    if (isNew && this.personaInfoCache) {
+      this.personaInfoCache.requestName(dwRPersonaIx, (resolvedName: string) => {
+        const avatar = this.avatars.get(dwRPersonaIx);
+        if (avatar && avatar.name !== resolvedName) {
+          avatar.name = resolvedName;
+          this.notifyObservers();
+        }
+      });
+    }
   }
 
   /**
