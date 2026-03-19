@@ -929,20 +929,23 @@ var ProximityAvatarList = class {
     this.observers = /* @__PURE__ */ new Set();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     this.originalEmit = null;
+    this.personaInfoCache = null;
   }
   /**
    * Initialize and hook into the Proximity instance.
    * Wraps Proximity's Emit method to intercept onAvatarUpdate events.
    *
    * @param proximity The MV.MVRP.Proximity instance from ProximityAudioManager
+   * @param cache     Optional PersonaInfoCache for resolving avatar names
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  init(proximity) {
+  init(proximity, cache) {
     if (!proximity) {
       console.warn("[ProximityAvatarList] Proximity instance is null");
       return;
     }
     this.proximity = proximity;
+    this.personaInfoCache = cache ?? null;
     this.setupProximityInterception();
     console.log("[ProximityAvatarList] Initialized and hooked into Proximity");
   }
@@ -1079,6 +1082,15 @@ var ProximityAvatarList = class {
       distance
     });
     this.notifyObservers();
+    if (isNew && this.personaInfoCache) {
+      this.personaInfoCache.requestName(dwRPersonaIx, (resolvedName) => {
+        const avatar = this.avatars.get(dwRPersonaIx);
+        if (avatar && avatar.name !== resolvedName) {
+          avatar.name = resolvedName;
+          this.notifyObservers();
+        }
+      });
+    }
   }
   /**
    * Proximity callback: External avatar has been removed from the world.
@@ -1173,6 +1185,177 @@ var ProximityAvatarList = class {
   }
 };
 
+// src/client/PersonaInfoCache.ts
+var _PersonaInfoCache = class _PersonaInfoCache {
+  constructor() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    this.cacheLnG = null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    this.personaCache = null;
+    /** Resolved names keyed by numeric persona ID. */
+    this.nameCache = /* @__PURE__ */ new Map();
+    /** Callbacks waiting for a name, keyed by numeric persona ID. */
+    this.pendingCallbacks = /* @__PURE__ */ new Map();
+    /** Persona IDs queued for the next batched Fetch call. */
+    this.fetchQueue = /* @__PURE__ */ new Set();
+    /** Timer handle for the batched fetch. */
+    this.batchTimer = null;
+    try {
+      const pFabric2 = getPFabric();
+      if (!pFabric2) {
+        console.warn("[PersonaInfoCache] pFabric not available; names will not be fetched");
+        return;
+      }
+      this.cacheLnG = pFabric2.GetLnG("persona_cache");
+      if (!this.cacheLnG) {
+        console.warn('[PersonaInfoCache] GetLnG("persona_cache") returned null');
+        return;
+      }
+      this.personaCache = this.cacheLnG.Model_Open("RPersona_Cache");
+      if (!this.personaCache) {
+        console.warn('[PersonaInfoCache] Model_Open("RPersona_Cache") returned null');
+        return;
+      }
+      console.log("[PersonaInfoCache] Initialized \u2014 RPersona_Cache model ready");
+    } catch (err) {
+      console.error("[PersonaInfoCache] Error during initialization:", err);
+    }
+  }
+  /**
+   * Request the display name for a persona.
+   *
+   * If the name is already cached it is returned synchronously via the
+   * callback.  Otherwise the ID is queued and the callback is invoked once
+   * the next batched `Fetch()` call completes.
+   *
+   * @param personaID Numeric persona ID (`twRPersonaIx`).
+   * @param callback  Called with the resolved display name (e.g. "Jane Smith").
+   */
+  requestName(personaID, callback) {
+    const cached = this.nameCache.get(personaID);
+    if (cached !== void 0) {
+      callback(cached);
+      return;
+    }
+    const existing = this.pendingCallbacks.get(personaID);
+    if (existing) {
+      existing.push(callback);
+    } else {
+      this.pendingCallbacks.set(personaID, [callback]);
+    }
+    this.fetchQueue.add(personaID);
+    if (this.batchTimer === null) {
+      this.batchTimer = setTimeout(() => this.flushFetchQueue(), _PersonaInfoCache.BATCH_DELAY_MS);
+    }
+  }
+  /**
+   * Flush the queued persona IDs with a single `RPersona_Cache.Fetch()` call.
+   */
+  flushFetchQueue() {
+    this.batchTimer = null;
+    if (!this.personaCache || this.fetchQueue.size === 0) {
+      return;
+    }
+    const ids = Array.from(this.fetchQueue);
+    this.fetchQueue = /* @__PURE__ */ new Set();
+    console.log("[PersonaInfoCache] Fetching names for persona IDs:", ids);
+    try {
+      this.personaCache.Fetch(ids, this, (response) => {
+        this.handleFetchResponse(response, ids);
+      });
+    } catch (err) {
+      console.error("[PersonaInfoCache] Fetch error:", err);
+      for (const id of ids) {
+        this.resolveName(id, `Avatar ${id}`);
+      }
+    }
+  }
+  /**
+   * Process the response from `RPersona_Cache.Fetch()`.
+   *
+   * The response is a record keyed by string persona ID; each value is an
+   * object that includes `Name_wsForename`, `Name_wsSurname`, etc.
+   * `requestedIds` is the list of IDs that were sent in this specific Fetch
+   * call; any IDs missing from the response receive a fallback name.
+   */
+  handleFetchResponse(response, requestedIds) {
+    if (!response || typeof response !== "object") {
+      console.warn("[PersonaInfoCache] Unexpected Fetch response:", response);
+      for (const id of requestedIds) {
+        this.resolveName(id, `Avatar ${id}`);
+      }
+      return;
+    }
+    const resolved = /* @__PURE__ */ new Set();
+    for (const [key, data] of Object.entries(response)) {
+      const personaID = Number(key);
+      if (isNaN(personaID)) continue;
+      const forename = typeof data?.Name_wsForename === "string" ? data.Name_wsForename : "";
+      const surname = typeof data?.Name_wsSurname === "string" ? data.Name_wsSurname : "";
+      const displayName = [forename, surname].filter(Boolean).join(" ") || `Avatar ${personaID}`;
+      this.resolveName(personaID, displayName);
+      resolved.add(personaID);
+    }
+    for (const id of requestedIds) {
+      if (!resolved.has(id)) {
+        const fallback = `Avatar ${id}`;
+        console.warn(`[PersonaInfoCache] No data for persona ${id}; using fallback "${fallback}"`);
+        this.resolveName(id, fallback);
+      }
+    }
+  }
+  /**
+   * Store a resolved name in the cache and invoke all waiting callbacks.
+   */
+  resolveName(personaID, name) {
+    this.nameCache.set(personaID, name);
+    const callbacks = this.pendingCallbacks.get(personaID);
+    if (callbacks) {
+      this.pendingCallbacks.delete(personaID);
+      for (const cb of callbacks) {
+        try {
+          cb(name);
+        } catch (err) {
+          console.error("[PersonaInfoCache] Callback error for persona", personaID, err);
+        }
+      }
+    }
+  }
+  /**
+   * Release the RPersona_Cache model and cancel any pending timer.
+   */
+  dispose() {
+    if (this.batchTimer !== null) {
+      clearTimeout(this.batchTimer);
+      this.batchTimer = null;
+    }
+    for (const [id, callbacks] of this.pendingCallbacks) {
+      for (const cb of callbacks) {
+        try {
+          cb(`Avatar ${id}`);
+        } catch (_) {
+        }
+      }
+    }
+    this.pendingCallbacks.clear();
+    this.fetchQueue.clear();
+    if (this.personaCache && this.cacheLnG) {
+      try {
+        this.cacheLnG.Model_Close(this.personaCache);
+      } catch (err) {
+        console.error("[PersonaInfoCache] Error closing model:", err);
+      }
+      this.personaCache = null;
+    }
+    this.cacheLnG = null;
+    this.nameCache.clear();
+    console.log("[PersonaInfoCache] Disposed");
+  }
+};
+/** How long (ms) to accumulate IDs before issuing a Fetch call. */
+_PersonaInfoCache.BATCH_DELAY_MS = 500;
+var PersonaInfoCache = _PersonaInfoCache;
+
 // src/client/AudioVisualizer.ts
 var _AudioVisualizer = class _AudioVisualizer {
   constructor(container, options) {
@@ -1182,6 +1365,7 @@ var _AudioVisualizer = class _AudioVisualizer {
     this.audioCapture = null;
     // ProximityAvatarList tracks nearby avatars and updates the proximity panel
     this.proximityList = null;
+    this.personaInfoCache = null;
     this.proximityPanel = null;
     // Scratch buffer for reading PCM samples from the audioCapture ring buffer
     this.readBuffer = new Float32Array(960);
@@ -1245,7 +1429,8 @@ var _AudioVisualizer = class _AudioVisualizer {
     audioManager.registerDecodeCapture(this.audioCapture);
     console.log("[AudioVisualizer] Capture attached to decode interceptor");
     this.proximityList = new ProximityAvatarList();
-    this.proximityList.init(proximity);
+    this.personaInfoCache = new PersonaInfoCache();
+    this.proximityList.init(proximity, this.personaInfoCache);
     this.proximityList.addObserver((avatars) => this.updateProximityPanel(avatars));
     this.proximityPanel = document.getElementById("proximity-panel");
     console.log("[AudioVisualizer] Proximity avatar list initialized");
@@ -1266,6 +1451,10 @@ var _AudioVisualizer = class _AudioVisualizer {
       this.audioCapture.disable();
       this.audioCapture.dispose();
       this.audioCapture = null;
+    }
+    if (this.personaInfoCache) {
+      this.personaInfoCache.dispose();
+      this.personaInfoCache = null;
     }
     if (this.proximityList) {
       this.proximityList.dispose();
@@ -1364,15 +1553,15 @@ var _AudioVisualizer = class _AudioVisualizer {
       this.audioCapture.dispose();
       this.audioCapture = null;
     }
+    if (this.personaInfoCache) {
+      this.personaInfoCache.dispose();
+      this.personaInfoCache = null;
+    }
     if (this.proximityList) {
       this.proximityList.dispose();
       this.proximityList = null;
     }
     this.audioManager = null;
-    if (this.proximityList) {
-      this.proximityList.dispose();
-      this.proximityList = null;
-    }
     this.proximityPanel = null;
     if (this.canvas.parentNode) {
       this.canvas.parentNode.removeChild(this.canvas);
